@@ -127,7 +127,7 @@ int main()
 
     /* allocate additional pages */
     for (i = PF_MAX_BUFS; i < PF_MAX_BUFS * 2; i++) {
-        if ((error = PF_AllocPage(fd2, &pagenum, &buf)) != PFE_OK) {
+        if ((error = PF_AllocPage(fd2, &pagenum,  (char **)&buf)) != PFE_OK) {
             PF_PrintError("alloc page fd2");
             exit(1);
         }
@@ -138,7 +138,7 @@ int main()
         }
         printf("alloc %d file2, page %d\n", i, pagenum);
 
-        if ((error = PF_AllocPage(fd1, &pagenum, &buf)) != PFE_OK) {
+        if ((error = PF_AllocPage(fd1, &pagenum,  (char **)&buf)) != PFE_OK) {
             PF_PrintError("alloc page fd1");
             exit(1);
         }

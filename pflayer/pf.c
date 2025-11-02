@@ -286,6 +286,39 @@ int PF_CloseFile(int fd)
     return PFE_OK;
 }
 
+//my functions
+
+// helper funcs
+int PFreadhdr(int fd, PFhdr_str *hdr){
+    int error;
+    if ((error = lseek(PFftab[fd].unixfd, 0, L_SET)) == -1) {
+        PFerrno = PFE_UNIX;
+        return PFerrno;
+    }
+
+    if ((error = read(PFftab[fd].unixfd, (char *)hdr, PF_HDR_SIZE)) != PF_HDR_SIZE) {
+        PFerrno = (error < 0) ? PFE_UNIX : PFE_INCOMPLETEREAD;
+        return PFerrno;
+    }
+
+    return PFE_OK;
+}
+int PFwritehdr(int fd, PFhdr_str *hdr){
+    int error;
+    if ((error = lseek(PFftab[fd].unixfd, 0, L_SET)) == -1) {
+        PFerrno = PFE_UNIX;
+        return PFerrno;
+    }
+
+    if ((error = write(PFftab[fd].unixfd, (char *)hdr, PF_HDR_SIZE)) != PF_HDR_SIZE) {
+        PFerrno = (error < 0) ? PFE_UNIX : PFE_INCOMPLETEREAD;
+        return PFerrno;
+    }
+    printf("header updated successfully");
+    return PFE_OK;
+}
+//end
+
 /****************************************************************************
 SPECIFICATIONS:
 	Print last PF error with a given string
@@ -323,3 +356,4 @@ void PF_PrintError( char *s)
     else
         fprintf(stderr, "\n");
 }
+

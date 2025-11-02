@@ -1,7 +1,7 @@
 #PUBLICDIR= /usr0/cs564/public/project
-SRC= buf.c hash.c pf.c
-OBJ= buf.o hash.o pf.o
-HDR = pftypes.h pf.h 
+SRC = buf.c hash.c pf.c pageOperation.c
+OBJ = buf.o hash.o pf.o pageOperation.o
+HDR = pftypes.h pf.h
 
 pflayer.o: $(OBJ)
 	ld -r -o pflayer.o $(OBJ)
@@ -20,8 +20,14 @@ testhash.o: $(HDR)
 
 testpf.o: $(HDR)
 
-lint: 
+lint:
 	lint $(SRC)
 
-install: pflayer.o 
+install: pflayer.o
 
+
+clean: 
+	rm -f *.o
+	rm -f *.out
+	rm -f file1
+	rm -f file2
