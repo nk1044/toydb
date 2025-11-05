@@ -98,3 +98,46 @@ int PF_DisposePage(int fd, int pagenum) {
 
     return PFE_OK;
 }
+
+int PF_GetThisPage(int fd, int pagenum, char **pagebuf)
+{
+    int error;
+    PFhdr_str hdr;
+    PFfpage *fpage;
+
+    if ((error = PFreadhdr(fd, &hdr)) != PFE_OK)
+        return error;
+
+    if (pagenum < 0 || pagenum >= hdr.numpages) {
+        PFerrno = PFE_INVALIDPAGE;
+        return PFerrno;
+    }
+
+    if ((error = PFbufGet(fd, pagenum, &fpage, PFreadfcn, PFwritefcn)) != PFE_OK)
+        return error;
+
+    *pagebuf = fpage->pagebuf;
+
+    return PFE_OK;
+}
+
+int PF_GetFirstPage(int fd, int *pagenum, char **pagebuf)
+{
+    int error;
+    PFhdr_str hdr;
+    PFfpage *fpage;
+
+    if ((error = PFreadhdr(fd, &hdr)) != PFE_OK)
+        return error;
+
+    if (hdr.numpages == 0)
+        return PFE_EOF;
+
+    *pagenum = 0;
+
+    if ((error = PFbufGet(fd, *pagenum, &fpage, PFreadfcn, PFwritefcn)) != PFE_OK)
+        return error;
+
+    *pagebuf = fpage->pagebuf;
+    return PFE_OK;
+}

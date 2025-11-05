@@ -1,40 +1,75 @@
-/* pf.h: externs and error codes for Paged File Interface*/
+#ifndef PF_H_
+#define PF_H_
+
+#include <stdio.h>
+
+/* bring in all PF-related structs */
+#include "pftypes.h"
+
 #ifndef TRUE
-#define TRUE 1		
+#define TRUE 1
 #endif
+
 #ifndef FALSE
 #define FALSE 0
 #endif
 
 /************** Error Codes *********************************/
-#define PFE_OK		0	/* OK */
-#define PFE_NOMEM	-1	/* no memory */
-#define PFE_NOBUF	-2	/* no buffer space */
-#define PFE_PAGEFIXED 	-3	/* page already fixed in buffer */
-#define PFE_PAGENOTINBUF -4	/* page to be unfixed is not in the buffer */
-#define PFE_UNIX	-5	/* unix error */
-#define PFE_INCOMPLETEREAD -6	/* incomplete read of page from file */
-#define PFE_INCOMPLETEWRITE -7	/* incomplete write of page to file */
-#define PFE_HDRREAD	-8	/* incomplete read of header from file */
-#define PFE_HDRWRITE	-9	/* incomplte write of header to file */
-#define PFE_INVALIDPAGE -10	/* invalid page number */
-#define PFE_FILEOPEN	-11	/* file already open */
-#define	PFE_FTABFULL	-12	/* file table is full */
-#define PFE_FD		-13	/* invalid file descriptor */
-#define PFE_EOF		-14	/* end of file */
-#define PFE_PAGEFREE	-15	/* page already free */
-#define PFE_PAGEUNFIXED	-16	/* page already unfixed */
+#define PFE_OK              0
+#define PFE_NOMEM          -1
+#define PFE_NOBUF          -2
+#define PFE_PAGEFIXED      -3
+#define PFE_PAGENOTINBUF   -4
+#define PFE_UNIX           -5
+#define PFE_INCOMPLETEREAD -6
+#define PFE_INCOMPLETEWRITE -7
+#define PFE_HDRREAD        -8
+#define PFE_HDRWRITE       -9
+#define PFE_INVALIDPAGE    -10
+#define PFE_FILEOPEN       -11
+#define PFE_FTABFULL       -12
+#define PFE_FD             -13
+#define PFE_EOF            -14
+#define PFE_PAGEFREE       -15
+#define PFE_PAGEUNFIXED    -16
+#define PFE_PAGEINBUF      -17
+#define PFE_HASHNOTFOUND   -18
+#define PFE_HASHPAGEEXIST  -19
 
-/* Internal error: please report to the TA */
-#define PFE_PAGEINBUF	-17	/* new page to be allocated already in buffer */
-#define PFE_HASHNOTFOUND -18	/* hash table entry not found */
-#define PFE_HASHPAGEEXIST -19	/* page already exist in hash table */
+/* Page size */
+#define PF_PAGE_SIZE 4096
 
+/* Global error variable */
+extern int PFerrno;
 
-/* page size */
-#define PF_PAGE_SIZE	1020
+/**************** Function Declarations ****************/
 
-/* externs from the PF layer */
-extern int PFerrno;		/* error number of last error */
-extern void PF_Init();
-extern void PF_PrintError();
+/* Initialization and utilities */
+void PF_Init(void);
+void PF_PrintError( char *s);
+
+/* File operations */
+int PF_CreateFile(const char *fname);
+int PF_DestroyFile(const char *fname);
+int PF_OpenFile(const char *fname);
+int PF_CloseFile(int fd);
+
+/* Page operations */
+int PF_AllocPage(int fd, int *pagenum, char **buf);
+int PF_GetNextPage(int fd, int *pagenum, char **pagebuf);
+int PF_UnfixPage(int fd, int pagenum, int dirty);
+int PF_DisposePage(int fd, int pagenum);
+int PFreadfcn(int fd, int pagenum, PFfpage *buf);
+int PFwritefcn(int fd, int pagenum, PFfpage *buf);
+int PFreadhdr(int fd, PFhdr_str *hdr);
+int PFwritehdr(int fd, PFhdr_str *hdr);
+
+/* Buffer and hash debug prints */
+void PFbufPrint(void);
+void PFhashPrint(void);
+int PFbufReleaseFile(int fd, int (*writefcn)(int, int, PFfpage *));
+int PFbufAlloc(int fd, int pagenum, PFfpage **fpage, int (*writefcn)(int, int, PFfpage *)) ;
+int PFbufGet(int fd, int pagenum, PFfpage **fpage, int (*readfcn)(int, int, PFfpage *), int (*writefcn)(int, int, PFfpage *));
+int PFbufUnfix(int fd, int pagenum, int dirty);
+
+#endif /* PF_H_ */

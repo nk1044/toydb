@@ -11,3 +11,45 @@ coverage/
 *.tmp
 .cache/
 Thumbs.db
+# Ignore object files and linkable intermediates
+*.o
+*.lo
+*.la
+*.obj
+*.a
+*.so
+*.dll
+*.dylib
+
+# Ignore executables and test binaries
+testpf
+testhash
+test1
+test2
+test3
+*.out
+a.out
+
+# Ignore PF layer intermediate archive
+pflayer.o
+
+# Ignore editor / IDE backups and temp files
+*~
+*.swp
+*.bak
+*.tmp
+*.log
+
+# Ignore build directories
+/build/
+bin/
+debug/
+dist/
+
+# Ignore OS / environment files
+.DS_Store
+Thumbs.db
+
+# Ignore user-specific config
+.vscode/
+.idea/
