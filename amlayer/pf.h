@@ -63,6 +63,8 @@ int PFreadfcn(int fd, int pagenum, PFfpage *buf);
 int PFwritefcn(int fd, int pagenum, PFfpage *buf);
 int PFreadhdr(int fd, PFhdr_str *hdr);
 int PFwritehdr(int fd, PFhdr_str *hdr);
+int PF_GetThisPage(int fd, int pagenum, char **pagebuf);
+int PF_GetFirstPage(int fd, int *pagenum, char **pagebuf);
 
 /* Buffer and hash debug prints */
 void PFbufPrint(void);

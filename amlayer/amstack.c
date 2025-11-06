@@ -1,44 +1,35 @@
-# include <stdio.h>
-# include "am.h"
-# include "pf.h"
+#include <stdio.h>
+#include "am.h"
+#include "pf.h"
 
-# define AM_MAXSTACK 50
+#define AM_MAXSTACK 50
 
-struct
-    {
-     int pageNumber;
-     int offset;
-    } AM_Stack[AM_MAXSTACK];
+struct {
+    int pageNumber;
+    int offset;
+} AM_Stack[AM_MAXSTACK];
 
 int AM_topofStackPtr = -1;
 
-AM_PushStack(pageNum,offset)
-int pageNum;
-int offset;
-
+void AM_PushStack(int pageNum, int offset)
 {
-AM_topofStackPtr++;
-AM_Stack[AM_topofStackPtr].pageNumber  = pageNum;
-AM_Stack[AM_topofStackPtr].offset  = offset;
+    AM_topofStackPtr++;
+    AM_Stack[AM_topofStackPtr].pageNumber = pageNum;
+    AM_Stack[AM_topofStackPtr].offset = offset;
 }
 
-AM_PopStack()
-
+void AM_PopStack(void)
 {
-AM_topofStackPtr--;
+    AM_topofStackPtr--;
 }
 
-AM_topofStack(pageNum,offset)
-int *pageNum;
-int *offset;
+void AM_topofStack(int *pageNum, int *offset)
 {
-*pageNum = AM_Stack[AM_topofStackPtr].pageNumber ;
-*offset = AM_Stack[AM_topofStackPtr].offset ;
+    *pageNum = AM_Stack[AM_topofStackPtr].pageNumber;
+    *offset = AM_Stack[AM_topofStackPtr].offset;
 }
 
-AM_EmptyStack()
-
+void AM_EmptyStack(void)
 {
-AM_topofStackPtr = -1;
+    AM_topofStackPtr = -1;
 }
-
