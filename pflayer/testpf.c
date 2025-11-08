@@ -186,6 +186,13 @@ int main()
 
 /*---------------------------------------*/
 /* writefile function */
+/* write PF_MAX_BUFS pages to the given file */
+/* each page contains its page number as data */
+/* then unfix all pages */
+/* close the file */
+/* if any error occurs, print it and exit */
+/* fname: the name of the file to write */
+/*---------------------------------------*/
 void writefile(const char *fname)
 {
     int i, fd, pagenum, *buf;
