@@ -152,9 +152,12 @@ RETURN VALUE:
 *****************************************************************************/
 int PF_CreateFile(const char *fname)
 {
-    int fd;
-    PFhdr_str hdr;
+    int fd; // file descriptor
+    PFhdr_str hdr; // file header (in-memory) stores first free page and numpages
 
+    // check if file already exists
+    // If open() with O_EXCL fails, the file already exists (with error code PFE_UNIX)
+    // else create the file
     if ((fd = open(fname, O_CREAT | O_EXCL | O_WRONLY, 0664)) < 0) {
         PFerrno = PFE_UNIX;
         return PFerrno;
@@ -163,6 +166,8 @@ int PF_CreateFile(const char *fname)
     hdr.firstfree = PF_PAGE_LIST_END; /* no free page yet */
     hdr.numpages = 0;
 	int error;
+    // write the header to the file
+    // if write fails, close the file and delete it
     if ((error=write(fd,(char *)&hdr,sizeof(hdr))) != sizeof(hdr)){
         PFerrno = (error) ? PFE_UNIX : PFE_HDRWRITE;
         close(fd);
@@ -189,7 +194,7 @@ RETURN VALUE:
 *****************************************************************************/
 int PF_DestroyFile(const char *fname)
 {
-    if (PFtabFindFname(fname) != -1) {
+    if (PFtabFindFname(fname) != -1) { // file is open then cannot be destroyed
         PFerrno = PFE_FILEOPEN;
         return PFerrno;
     }
@@ -213,16 +218,17 @@ int PF_OpenFile(const char *fname)
 {
     int fd;
 
-    if ((fd = PFftabFindFree()) < 0) {
+    if ((fd = PFftabFindFree()) < 0) { // no free entry in PFftab then error
         PFerrno = PFE_FTABFULL;
         return PFerrno;
     }
 
-    if ((PFftab[fd].unixfd = open(fname, O_RDWR)) < 0) {
+    if ((PFftab[fd].unixfd = open(fname, O_RDWR)) < 0) { // open file fails then error
         PFerrno = PFE_UNIX;
         return PFerrno;
     }
 
+    // read the file header
     int count;
     if ((count = read(PFftab[fd].unixfd, (char *)&PFftab[fd].hdr, PF_HDR_SIZE)) != PF_HDR_SIZE) {
         PFerrno = (count < 0) ? PFE_UNIX : PFE_HDRREAD;
@@ -314,7 +320,6 @@ int PFwritehdr(int fd, PFhdr_str *hdr){
         PFerrno = (error < 0) ? PFE_UNIX : PFE_INCOMPLETEREAD;
         return PFerrno;
     }
-    printf("header updated successfully");
     return PFE_OK;
 }
 //end
