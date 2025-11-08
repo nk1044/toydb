@@ -46,6 +46,8 @@ void PFbufUnlink(PFbpage *bpage) {
     bpage->prevpage = bpage->nextpage = NULL;
 }
 
+#define USE_MRU 0   /* 0 = LRU, 1 = MRU */
+
 /* Internal buffer allocation routine */
 static int PFbufInternalAlloc(PFbpage **bpage, int (*writefcn)(int, int, PFfpage *)) {
     PFbpage *tbpage;
@@ -54,37 +56,59 @@ static int PFbufInternalAlloc(PFbpage **bpage, int (*writefcn)(int, int, PFfpage
     if (PFfreebpage != NULL) {
         *bpage = PFfreebpage;
         PFfreebpage = (*bpage)->nextpage;
-    } else if (PFnumbpage < PF_MAX_BUFS) {
+    } 
+    else if (PFnumbpage < PF_MAX_BUFS) {
         if ((*bpage = (PFbpage *)malloc(sizeof(PFbpage))) == NULL) {
             *bpage = NULL;
             PFerrno = PFE_NOMEM;
             return PFerrno;
         }
         PFnumbpage++;
-    } else {
+    } 
+    else {
+        /* Choose a victim page using LRU or MRU */
         *bpage = NULL;
-        for (tbpage = PFlastbpage; tbpage != NULL; tbpage = tbpage->prevpage) {
-            if (!tbpage->fixed)
-                break;
+
+        if (USE_MRU) {
+            /* ---------------- MRU: Evict from HEAD ---------------- */
+            for (tbpage = PFfirstbpage; tbpage != NULL; tbpage = tbpage->nextpage) {
+                if (!tbpage->fixed)
+                    break;
+            }
+        } 
+        else {
+            /* ---------------- LRU: Evict from TAIL ---------------- */
+            for (tbpage = PFlastbpage; tbpage != NULL; tbpage = tbpage->prevpage) {
+                if (!tbpage->fixed)
+                    break;
+            }
         }
+
         if (tbpage == NULL) {
             PFerrno = PFE_NOBUF;
             return PFerrno;
         }
-        if (tbpage->dirty && (error = (*writefcn)(tbpage->fd, tbpage->page, &tbpage->fpage)) != PFE_OK)
+
+        /* Write page back if needed */
+        if (tbpage->dirty && 
+            (error = (*writefcn)(tbpage->fd, tbpage->page, &tbpage->fpage)) != PFE_OK)
             return error;
+
         tbpage->dirty = FALSE;
 
         if ((error = PFhashDelete(tbpage->fd, tbpage->page)) != PFE_OK)
             return error;
 
+        /* Remove it from the used list, will be reused */
         PFbufUnlink(tbpage);
         *bpage = tbpage;
     }
 
+    /* Put newly allocated page at head (recently used) */
     PFbufLinkHead(*bpage);
     return PFE_OK;
 }
+
 
 /* Get a page from the file and fix it in buffer */
 int PFbufGet(int fd, int pagenum, PFfpage **fpage, int (*readfcn)(int, int, PFfpage *), int (*writefcn)(int, int, PFfpage *)) {
