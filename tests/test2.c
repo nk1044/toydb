@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "utils.h"
 #include "../pflayer/pf.h"
-#include "../spLayer/hf.h"
+#include "../hfLayer/hf.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +11,7 @@
 #define STATIC_FILE  "courses_static.hf"
 #define DATASET      "../data/courses.txt"
 
-/* Zero PF globals (since PF_ResetCounters doesn't exist) */
+/* Zero PF globals */
 static inline void reset_pf(void) {
     PF_physical_reads = PF_physical_writes = 0;
     PF_logical_reads  = PF_logical_writes  = 0;
@@ -26,14 +26,30 @@ typedef struct {
     char type[4];
 } CourseRec;
 
+/* Strip trailing newline from string */
+static void strip_newline(char *str) {
+    size_t len = strlen(str);
+    if (len > 0 && str[len-1] == '\n') {
+        str[len-1] = '\0';
+    }
+    if (len > 1 && str[len-2] == '\r') {
+        str[len-2] = '\0';
+    }
+}
+
 /* Load the dataset into a slotted-page HF file (variable-length) */
 static int load_courses_into_hf(const char *dataset, const char *file) {
     FILE *f = fopen(dataset, "r");
-    if (!f) { perror("fopen dataset"); return -1; }
+    if (!f) { 
+        perror("fopen dataset"); 
+        printf("ERROR: Could not open %s\n", dataset);
+        return -1; 
+    }
 
     remove(file);
     printf("[HF] Creating file: %s\n", file);
-    if (HF_CreateFile(file) < 0) {
+    int err = HF_CreateFile(file);
+    if (err != PFE_OK) {
         PF_PrintError("HF_CreateFile");
         fclose(f);
         return -1;
@@ -50,28 +66,37 @@ static int load_courses_into_hf(const char *dataset, const char *file) {
     int count = 0;
 
     while (fgets(line, sizeof(line), f)) {
+        strip_newline(line);
+        
         if (!strchr(line, ';')) continue;
+        if (strlen(line) == 0) continue;
 
-        CourseRec c; memset(&c, 0, sizeof(c));
+        CourseRec c; 
+        memset(&c, 0, sizeof(c));
 
-        char *tok = strtok(line, ";");
+        char *saveptr;
+        char *tok = strtok_r(line, ";", &saveptr);
         if (!tok) continue;
         strncpy(c.code, tok, sizeof(c.code) - 1);
 
-        tok = strtok(NULL, ";");
+        tok = strtok_r(NULL, ";", &saveptr);
         if (!tok) continue;
         strncpy(c.name, tok, sizeof(c.name) - 1);
 
-        tok = strtok(NULL, ";");
+        tok = strtok_r(NULL, ";", &saveptr);
         if (!tok) continue;
         c.credits = atof(tok);
 
-        tok = strtok(NULL, ";");
-        if (tok) strncpy(c.type, tok, sizeof(c.type) - 1);
+        tok = strtok_r(NULL, ";", &saveptr);
+        if (tok) {
+            strncpy(c.type, tok, sizeof(c.type) - 1);
+        }
 
         HF_RID rid;
-        if (HF_InsertRecord(fd, &c, (int)sizeof(c), &rid) < 0) {
+        err = HF_InsertRecord(fd, &c, (int)sizeof(c), &rid);
+        if (err != PFE_OK) {
             PF_PrintError("HF_InsertRecord");
+            printf("ERROR: Failed to insert record %d\n", count);
             HF_CloseFile(fd);
             fclose(f);
             return -1;
@@ -89,10 +114,14 @@ static int load_courses_into_hf(const char *dataset, const char *file) {
 }
 
 int main(void) {
-    Stats s; stats_reset(&s);
+    Stats s; 
+    stats_reset(&s);
 
     printf("=== HF LAYER SPACE UTILIZATION TEST ===\n");
     printf("Dataset: %s\n\n", DATASET);
+
+    /* Initialize PF layer - CRITICAL! */
+    PF_Init();
 
     /* -------- Slotted-page (variable-length) load -------- */
     printf("[TEST] Loading dataset into slotted-page file (%s)\n", HF_FILE);
@@ -101,6 +130,10 @@ int main(void) {
     stats_start(&s);
 
     int n_var = load_courses_into_hf(DATASET, HF_FILE);
+    if (n_var < 0) {
+        printf("ERROR: Failed to load variable-length file\n");
+        return 1;
+    }
 
     stats_stop(&s);
     stats_snapshot_from_pf(&s);
@@ -119,7 +152,8 @@ int main(void) {
     stats_start(&s);
 
     remove(STATIC_FILE);
-    if (HF_CreateFile(STATIC_FILE) < 0) {
+    int err = HF_CreateFile(STATIC_FILE);
+    if (err != PFE_OK) {
         PF_PrintError("HF_CreateFile(static)");
         return 1;
     }
@@ -133,6 +167,7 @@ int main(void) {
     FILE *f = fopen(DATASET, "r");
     if (!f) {
         perror("fopen dataset");
+        printf("ERROR: Could not open %s\n", DATASET);
         HF_CloseFile(fd);
         return 1;
     }
@@ -140,14 +175,19 @@ int main(void) {
     char line[512];
     int n_static = 0;
     while (fgets(line, sizeof(line), f)) {
-        printf("DEBUG: Read line: %s", line);
+        strip_newline(line);
+        
+        if (strlen(line) == 0) continue;
+        
         char buf[256];
         memset(buf, 0, sizeof(buf));
         strncpy(buf, line, sizeof(buf) - 1);
 
         HF_RID rid;
-        if (HF_InsertRecord(fd, buf, (int)sizeof(buf), &rid) < 0) {
+        err = HF_InsertRecord(fd, buf, (int)sizeof(buf), &rid);
+        if (err != PFE_OK) {
             PF_PrintError("HF_InsertRecord(static)");
+            printf("ERROR: Failed to insert static record %d\n", n_static);
             fclose(f);
             HF_CloseFile(fd);
             return 1;

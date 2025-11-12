@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "utils.h"
-#include "../splayer/hf.h"
+#include "../hfLayer/hf.h"
 #include "../amlayer/am.h"
 
 #define HF_FILE "courses_var.hf"

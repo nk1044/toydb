@@ -4,7 +4,7 @@ This project contains three layers:
 
 - `pflayer/`  → Page File (PF) Layer
 - `amlayer/`  → B+ Tree Access Method (AM) Layer
-- `spLayer/`  → Slotted-Page Heap File (HF) Layer
+- `hfLayer/`  → Slotted-Page Heap File (HF) Layer
 
 ## How to Build and Run
 
@@ -27,7 +27,7 @@ make
 ### 3. Build and Run HF Layer Test
 ```
 
-cd spLayer
+cd hfLayer
 make
 ./hf_test
 
@@ -38,6 +38,6 @@ make
 
 cd pflayer && make clean
 cd ../amlayer && make clean
-cd ../spLayer && make clean
+cd ../hfLayer && make clean
 
 ```

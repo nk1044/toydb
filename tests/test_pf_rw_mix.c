@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "utils.h"
 #include "pf.h"
-#include "../spLayer/hf.h"
+#include "../hfLayer/hf.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,10 +19,22 @@ typedef struct {
     char type[4];
 } CourseRec;
 
+/* Strip trailing newline */
+static void strip_newline(char *str) {
+    size_t len = strlen(str);
+    if (len > 0 && str[len-1] == '\n') {
+        str[len-1] = '\0';
+    }
+    if (len > 1 && str[len-2] == '\r') {
+        str[len-2] = '\0';
+    }
+}
+
 static int load_dataset(const char *path, int hf_fd) {
     FILE *f = fopen(path, "r");
     if (!f) {
-        printf("DEBUG: Failed to open dataset file: %s\n", path);
+        printf("ERROR: Failed to open dataset file: %s\n", path);
+        perror("fopen");
         return -1;
     }
 
@@ -30,33 +42,44 @@ static int load_dataset(const char *path, int hf_fd) {
     char line[512];
     int count = 0;
 
-    printf("DEBUG: Loading dataset from %s\n", path);
-    while (!feof(f)) {
-        if (!fgets(line, sizeof(line), f))
-            break;
-
-        printf("DEBUG: Read line: %s", line);
-
+    printf("INFO: Loading dataset from %s\n", path);
+    while (fgets(line, sizeof(line), f)) {
+        strip_newline(line);
+        
         if (!strchr(line, ';')) continue;
+        if (strlen(line) == 0) continue;
+        
         CourseRec c;
         memset(&c, 0, sizeof(c));
 
         char *saveptr;
         char *tok = strtok_r(line, ";", &saveptr);
-        if (!tok) continue; strncpy(c.code, tok, sizeof(c.code)-1);
+        if (!tok) continue; 
+        strncpy(c.code, tok, sizeof(c.code)-1);
+        
         tok = strtok_r(NULL, ";", &saveptr);
-        if (!tok) continue; strncpy(c.name, tok, sizeof(c.name)-1);
+        if (!tok) continue; 
+        strncpy(c.name, tok, sizeof(c.name)-1);
+        
         tok = strtok_r(NULL, ";", &saveptr);
-        if (!tok) continue; c.credits = atof(tok);
+        if (!tok) continue; 
+        c.credits = atof(tok);
+        
         tok = strtok_r(NULL, ";", &saveptr);
         if (tok) strncpy(c.type, tok, sizeof(c.type)-1);
 
         HF_RID rid;
-        HF_InsertRecord(hf_fd, &c, sizeof(c), &rid);
+        int err = HF_InsertRecord(hf_fd, &c, sizeof(c), &rid);
+        if (err != PFE_OK) {
+            printf("ERROR: Failed to insert record %d (error: %d)\n", count, err);
+            PF_PrintError("HF_InsertRecord");
+            continue;
+        }
+        
         count++;
-        if (count % 10 == 0) {
+        if (count % 100 == 0) {
             int net_fixed = PF_page_fix - PF_page_unfix;
-            printf("After %d inserts: fix=%d, unfix=%d, net=%d\n", 
+            printf("After %d inserts: fix=%lu, unfix=%lu, net=%d\n", 
                    count, PF_page_fix, PF_page_unfix, net_fixed);
             
             if (net_fixed > 50) {
@@ -67,11 +90,9 @@ static int load_dataset(const char *path, int hf_fd) {
     }
 
     fclose(f);
-    printf("DEBUG: Finished loading %d records from dataset\n", count);
+    printf("INFO: Finished loading %d records from dataset\n", count);
     return count;
 }
-
-
 
 /* === PF counter reset === */
 static inline void reset_pf(void) {
@@ -83,8 +104,10 @@ static inline void reset_pf(void) {
 int main(void) {
     Stats s;
 
-    printf("DEBUG: Initializing PF layer...\n");
+    printf("=== PF Layer Read/Write Mix Test ===\n\n");
+    
     /* Initialize PF layer */
+    printf("INFO: Initializing PF layer...\n");
     PF_Init();
 
     /* Strategies: LRU (0), MRU (1) */
@@ -94,51 +117,60 @@ int main(void) {
     };
 
     /* Optional: prepare dataset file via HF */
-    printf("DEBUG: Preparing HF dataset file...\n");
+    printf("\n--- Preparing HF dataset file ---\n");
     remove(HF_FILE);
     int hf_result = HF_CreateFile(HF_FILE);
     if (hf_result != PFE_OK) {
-        printf("DEBUG: HF_CreateFile failed with error: %d\n", hf_result);
+        printf("ERROR: HF_CreateFile failed with error: %d\n", hf_result);
+        PF_PrintError("HF_CreateFile");
     } else {
-        printf("DEBUG: HF_CreateFile succeeded\n");
-    }
-    
-    int hf_fd = HF_OpenFile(HF_FILE);
-    if (hf_fd >= 0) {
-        printf("DEBUG: HF_OpenFile succeeded, fd=%d\n", hf_fd);
-        int n = load_dataset(DATASET, hf_fd);
-        printf("DEBUG: Loaded %d records from dataset into %s\n", n, HF_FILE);
-        HF_CloseFile(hf_fd);
-        printf("DEBUG: Closed HF file\n");
-    } else {
-        printf("DEBUG: HF_OpenFile failed, fd=%d\n", hf_fd);
+        printf("INFO: HF_CreateFile succeeded\n");
+        
+        int hf_fd = HF_OpenFile(HF_FILE);
+        if (hf_fd >= 0) {
+            printf("INFO: HF_OpenFile succeeded, fd=%d\n", hf_fd);
+            int n = load_dataset(DATASET, hf_fd);
+            if (n > 0) {
+                printf("INFO: Loaded %d records from dataset into %s\n", n, HF_FILE);
+            } else {
+                printf("WARNING: Failed to load dataset (error code: %d)\n", n);
+            }
+            HF_CloseFile(hf_fd);
+            printf("INFO: Closed HF file\n");
+        } else {
+            printf("ERROR: HF_OpenFile failed, fd=%d\n", hf_fd);
+            PF_PrintError("HF_OpenFile");
+        }
     }
 
     /* ===== PF TEST ===== */
     for (int st = 0; st < 2; ++st) {
-        printf("\nDEBUG: Starting test with strategy: %s\n", names[st]);
+        printf("\n========================================\n");
+        printf("Testing with strategy: %s\n", names[st]);
+        printf("========================================\n");
+        
         USE_MRU = (st == 1);  // set global strategy
 
         remove(DBFILE);
         if (PF_CreateFile(DBFILE) != PFE_OK) {
             PF_PrintError("PF_CreateFile");
-            printf("DEBUG: PF_CreateFile failed for strategy %s\n", names[st]);
+            printf("ERROR: PF_CreateFile failed for strategy %s\n", names[st]);
             return 1;
         }
-        printf("DEBUG: PF_CreateFile succeeded\n");
+        printf("INFO: PF_CreateFile succeeded\n");
 
         int fd = PF_OpenFile(DBFILE);
         if (fd < 0) {
             PF_PrintError("PF_OpenFile");
-            printf("DEBUG: PF_OpenFile failed, fd=%d\n", fd);
+            printf("ERROR: PF_OpenFile failed, fd=%d\n", fd);
             return 1;
         }
-        printf("DEBUG: PF_OpenFile succeeded, fd=%d\n", fd);
+        printf("INFO: PF_OpenFile succeeded, fd=%d\n", fd);
 
         /* ----- Create initial N pages ----- */
         reset_pf();
         stats_reset(&s);
-        printf("DEBUG: Creating %d initial pages...\n", N_PAGES);
+        printf("\n--- Creating %d initial pages ---\n", N_PAGES);
         stats_start(&s);
 
         int alloc_errors = 0;
@@ -156,13 +188,13 @@ int main(void) {
                 alloc_errors++;
             }
             
-            if (i % 500 == 0) {
-                printf("DEBUG: Allocated %d pages so far...\n", i);
+            if ((i + 1) % 500 == 0) {
+                printf("INFO: Allocated %d pages so far...\n", i + 1);
             }
         }
         
         if (alloc_errors > 0) {
-            printf("DEBUG: Had %d allocation errors\n", alloc_errors);
+            printf("WARNING: Had %d allocation errors\n", alloc_errors);
         }
 
         stats_stop(&s);
@@ -171,13 +203,13 @@ int main(void) {
             char label[128];
             snprintf(label, sizeof(label), "%s create %d pages", names[st], N_PAGES);
             stats_dump("pf_stats.txt", label, &s);
-            printf("DEBUG: %s - Page creation completed in %.3f ms\n", 
+            printf("RESULT: %s - Page creation completed in %.3f ms\n", 
                    names[st], stats_elapsed_ms(&s));
         }
 
         /* ----- Read/Write Mixtures ----- */
         for (int i = 0; i < (int)(sizeof(mix)/sizeof(mix[0])); ++i) {
-            printf("DEBUG: Testing mix %d: R=%d, W=%d\n", 
+            printf("\n--- Mix %d: R=%d, W=%d ---\n", 
                    i, mix[i].reads, mix[i].writes);
             
             reset_pf();
@@ -200,8 +232,8 @@ int main(void) {
                     read_errors++;
                 }
                 
-                if (r % 2000 == 0 && r > 0) {
-                    printf("DEBUG: Completed %d/%d reads...\n", r, mix[i].reads);
+                if (r > 0 && r % 2000 == 0) {
+                    printf("INFO: Completed %d/%d reads...\n", r, mix[i].reads);
                 }
             }
 
@@ -218,8 +250,8 @@ int main(void) {
                     write_errors++;
                 }
                 
-                if (w % 2000 == 0 && w > 0) {
-                    printf("DEBUG: Completed %d/%d writes...\n", w, mix[i].writes);
+                if (w > 0 && w % 2000 == 0) {
+                    printf("INFO: Completed %d/%d writes...\n", w, mix[i].writes);
                 }
             }
 
@@ -230,19 +262,23 @@ int main(void) {
                      names[st], mix[i].reads, mix[i].writes, PF_MAX_BUFS);
             stats_dump("pf_stats.txt", label, &s);
             
-            printf("DEBUG: %s mix %d completed in %.3f ms (read errors: %d, write errors: %d)\n",
-                   names[st], i, stats_elapsed_ms(&s), read_errors, write_errors);
+            printf("RESULT: %s mix %d completed in %.3f ms\n", 
+                   names[st], i, stats_elapsed_ms(&s));
+            if (read_errors > 0 || write_errors > 0) {
+                printf("WARNING: read errors: %d, write errors: %d\n", 
+                       read_errors, write_errors);
+            }
         }
 
-        printf("DEBUG: Closing PF file for strategy %s\n", names[st]);
+        printf("\n--- Closing PF file for strategy %s ---\n", names[st]);
         if (PF_CloseFile(fd) != PFE_OK) {
             PF_PrintError("PF_CloseFile");
-            printf("DEBUG: PF_CloseFile failed\n");
+            printf("ERROR: PF_CloseFile failed\n");
         } else {
-            printf("DEBUG: PF_CloseFile succeeded\n");
+            printf("INFO: PF_CloseFile succeeded\n");
         }
     }
 
-    printf("DEBUG: All tests completed successfully!\n");
+    printf("\n=== All tests completed successfully! ===\n");
     return 0;
 }
