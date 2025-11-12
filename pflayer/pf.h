@@ -42,6 +42,7 @@
 /* Global error variable */
 extern int PFerrno;
 
+extern int USE_MRU;
 /**************** Function Declarations ****************/
 
 /* Initialization and utilities */
@@ -73,5 +74,11 @@ int PFbufReleaseFile(int fd, int (*writefcn)(int, int, PFfpage *));
 int PFbufAlloc(int fd, int pagenum, PFfpage **fpage, int (*writefcn)(int, int, PFfpage *)) ;
 int PFbufGet(int fd, int pagenum, PFfpage **fpage, int (*readfcn)(int, int, PFfpage *), int (*writefcn)(int, int, PFfpage *));
 int PFbufUnfix(int fd, int pagenum, int dirty);
+int PFbufUsed(int fd, int pagenum);
+
+extern unsigned long PF_physical_reads, PF_physical_writes;
+extern unsigned long PF_page_fix, PF_page_unfix, PF_page_alloc, PF_page_evicted;
+extern unsigned long PF_logical_reads, PF_logical_writes;
+
 
 #endif /* PF_H_ */

@@ -11,7 +11,7 @@
 
 /* To keep system V and PC users happy */
 #ifndef L_SET
-#define L_SET 0
+#define L_SET SEEK_SET
 #endif
 
 int PFerrno = PFE_OK; /* last error message */
@@ -24,6 +24,17 @@ static PFftab_ele PFftab[PF_FTAB_SIZE];
 
 /* true if page number "pagenum" of file "fd" is invalid */
 #define PFinvalidPagenum(fd,pagenum) ((pagenum) < 0 || (pagenum) >= PFftab[fd].hdr.numpages)
+
+/***************************for stat********************** */
+unsigned long PF_physical_reads = 0;
+unsigned long PF_physical_writes = 0;
+unsigned long PF_page_fix = 0;       // pin
+unsigned long PF_page_unfix = 0;     // unpin
+unsigned long PF_page_alloc = 0;
+unsigned long PF_page_evicted = 0;
+unsigned long PF_logical_reads = 0;   
+unsigned long PF_logical_writes = 0;
+/********************************************************* */
 
 /****************** Internal Support Functions *****************************/
 
@@ -84,18 +95,29 @@ RETURN VALUE:
 *****************************************************************************/
 int PFreadfcn(int fd, int pagenum, PFfpage *buf)
 {
-    int error;
+    ssize_t nread;
+    off_t offset;
 
-    if ((error = lseek(PFftab[fd].unixfd, pagenum * sizeof(PFfpage) + PF_HDR_SIZE, L_SET)) == -1) {
+    /* Seek to the page's byte offset: header + pagenum * PF_PAGE_SIZE */
+    offset = (off_t)PF_HDR_SIZE + (off_t)pagenum * (off_t)PF_PAGE_SIZE;
+    if (lseek(PFftab[fd].unixfd, offset, L_SET) == -1) {
         PFerrno = PFE_UNIX;
+        perror("lseek (read)");
         return PFerrno;
     }
 
-    if ((error = read(PFftab[fd].unixfd, (char *)buf, sizeof(PFfpage))) != sizeof(PFfpage)) {
-        PFerrno = (error < 0) ? PFE_UNIX : PFE_INCOMPLETEREAD;
+    nread = read(PFftab[fd].unixfd, (char *)buf, PF_PAGE_SIZE);
+    if (nread != (ssize_t)PF_PAGE_SIZE) {
+        PFerrno = (nread < 0) ? PFE_UNIX : PFE_INCOMPLETEREAD;
+        if (nread >= 0)
+            fprintf(stderr, "PFreadfcn: Incomplete read of page %d (got %zd bytes, expected %d)\n",
+                    pagenum, nread, PF_PAGE_SIZE);
+        else
+            perror("read");
         return PFerrno;
     }
 
+    PF_physical_reads++;
     return PFE_OK;
 }
 
@@ -109,18 +131,37 @@ RETURN VALUE:
 *****************************************************************************/
 int PFwritefcn(int fd, int pagenum, PFfpage *buf)
 {
-    int error;
+    ssize_t nwritten;
+    off_t offset;
 
-    if ((error = lseek(PFftab[fd].unixfd, pagenum * sizeof(PFfpage) + PF_HDR_SIZE, L_SET)) == -1) {
+    /* Seek to the page's byte offset: header + pagenum * PF_PAGE_SIZE */
+    offset = (off_t)PF_HDR_SIZE + (off_t)pagenum * (off_t)PF_PAGE_SIZE;
+    if (lseek(PFftab[fd].unixfd, offset, L_SET) == -1) {
         PFerrno = PFE_UNIX;
+        perror("lseek (write)");
         return PFerrno;
     }
 
-    if ((error = write(PFftab[fd].unixfd, (char *)buf, sizeof(PFfpage))) != sizeof(PFfpage)) {
-        PFerrno = (error < 0) ? PFE_UNIX : PFE_INCOMPLETEWRITE;
+    nwritten = write(PFftab[fd].unixfd, (char *)buf, PF_PAGE_SIZE);
+    if (nwritten != (ssize_t)PF_PAGE_SIZE) {
+        PFerrno = (nwritten < 0) ? PFE_UNIX : PFE_INCOMPLETEWRITE;
+        if (nwritten >= 0)
+            fprintf(stderr, "PFwritefcn: Incomplete write of page %d (wrote %zd bytes, expected %d)\n",
+                    pagenum, nwritten, PF_PAGE_SIZE);
+        else
+            perror("write");
         return PFerrno;
     }
 
+    /* Ensure data is flushed to disk on the real UNIX fd */
+    if (fsync(PFftab[fd].unixfd) == -1) {
+        /* fsync failure is a Unix error */
+        PFerrno = PFE_UNIX;
+        perror("fsync");
+        return PFerrno;
+    }
+
+    PF_physical_writes++;
     return PFE_OK;
 }
 
@@ -155,9 +196,7 @@ int PF_CreateFile(const char *fname)
     int fd; // file descriptor
     PFhdr_str hdr; // file header (in-memory) stores first free page and numpages
 
-    // check if file already exists
-    // If open() with O_EXCL fails, the file already exists (with error code PFE_UNIX)
-    // else create the file
+    /* check if file already exists */
     if ((fd = open(fname, O_CREAT | O_EXCL | O_WRONLY, 0664)) < 0) {
         PFerrno = PFE_UNIX;
         return PFerrno;
@@ -165,11 +204,11 @@ int PF_CreateFile(const char *fname)
 
     hdr.firstfree = PF_PAGE_LIST_END; /* no free page yet */
     hdr.numpages = 0;
-	int error;
-    // write the header to the file
-    // if write fails, close the file and delete it
-    if ((error=write(fd,(char *)&hdr,sizeof(hdr))) != sizeof(hdr)){
-        PFerrno = (error) ? PFE_UNIX : PFE_HDRWRITE;
+
+    /* write the header to the file using PF_HDR_SIZE so reading uses same size */
+    ssize_t written = write(fd, (char *)&hdr, PF_HDR_SIZE);
+    if (written != (ssize_t)PF_HDR_SIZE) {
+        PFerrno = (written < 0) ? PFE_UNIX : PFE_HDRWRITE;
         close(fd);
         unlink(fname);
         return PFerrno;
@@ -228,9 +267,9 @@ int PF_OpenFile(const char *fname)
         return PFerrno;
     }
 
-    // read the file header
-    int count;
-    if ((count = read(PFftab[fd].unixfd, (char *)&PFftab[fd].hdr, PF_HDR_SIZE)) != PF_HDR_SIZE) {
+    /* read the file header */
+    ssize_t count;
+    if ((count = read(PFftab[fd].unixfd, (char *)&PFftab[fd].hdr, PF_HDR_SIZE)) != (ssize_t)PF_HDR_SIZE) {
         PFerrno = (count < 0) ? PFE_UNIX : PFE_HDRREAD;
         close(PFftab[fd].unixfd);
         return PFerrno;
@@ -292,37 +331,240 @@ int PF_CloseFile(int fd)
     return PFE_OK;
 }
 
-//my functions
+/* helper funcs */
 
-// helper funcs
+/* read header */
 int PFreadhdr(int fd, PFhdr_str *hdr){
-    int error;
-    if ((error = lseek(PFftab[fd].unixfd, 0, L_SET)) == -1) {
+    ssize_t nread;
+    if (lseek(PFftab[fd].unixfd, 0, L_SET) == -1) {
         PFerrno = PFE_UNIX;
+        perror("lseek (read hdr)");
         return PFerrno;
     }
 
-    if ((error = read(PFftab[fd].unixfd, (char *)hdr, PF_HDR_SIZE)) != PF_HDR_SIZE) {
-        PFerrno = (error < 0) ? PFE_UNIX : PFE_INCOMPLETEREAD;
+    nread = read(PFftab[fd].unixfd, (char *)hdr, PF_HDR_SIZE);
+    if (nread != (ssize_t)PF_HDR_SIZE) {
+        PFerrno = (nread < 0) ? PFE_UNIX : PFE_INCOMPLETEREAD;
+        if (nread >= 0)
+            fprintf(stderr, "PFreadhdr: incomplete header read (got %zd bytes, expected %d)\n", nread, PF_HDR_SIZE);
         return PFerrno;
     }
 
     return PFE_OK;
 }
+
+/* write header */
 int PFwritehdr(int fd, PFhdr_str *hdr){
-    int error;
-    if ((error = lseek(PFftab[fd].unixfd, 0, L_SET)) == -1) {
+    ssize_t nwritten;
+    if (lseek(PFftab[fd].unixfd, 0, L_SET) == -1) {
         PFerrno = PFE_UNIX;
+        perror("lseek (write hdr)");
         return PFerrno;
     }
 
-    if ((error = write(PFftab[fd].unixfd, (char *)hdr, PF_HDR_SIZE)) != PF_HDR_SIZE) {
-        PFerrno = (error < 0) ? PFE_UNIX : PFE_INCOMPLETEREAD;
+    nwritten = write(PFftab[fd].unixfd, (char *)hdr, PF_HDR_SIZE);
+    if (nwritten != (ssize_t)PF_HDR_SIZE) {
+        PFerrno = (nwritten < 0) ? PFE_UNIX : PFE_HDRWRITE;
+        if (nwritten >= 0)
+            fprintf(stderr, "PFwritehdr: incomplete header write (wrote %zd bytes, expected %d)\n", nwritten, PF_HDR_SIZE);
+        return PFerrno;
+    }
+    /* ensure header durability */
+    if (fsync(PFftab[fd].unixfd) == -1) {
+        PFerrno = PFE_UNIX;
+        perror("fsync (hdr)");
         return PFerrno;
     }
     return PFE_OK;
 }
-//end
+
+int PF_AllocPage(int fd, int *pagenum, char **pagebuf){
+    PFfpage *fpage;	/* pointer to file page */
+int error;
+
+	if (PFinvalidFd(fd)){
+		PFerrno= PFE_FD;
+		return(PFerrno);
+	}
+
+	if (PFftab[fd].hdr.firstfree != PF_PAGE_LIST_END){
+		/* get a page from the free list */
+		*pagenum = PFftab[fd].hdr.firstfree;
+		if ((error=PFbufGet(fd,*pagenum,&fpage,PFreadfcn,
+					PFwritefcn))!= PFE_OK)
+			/* can't get the page */
+			return(error);
+		PFftab[fd].hdr.firstfree = fpage->nextfree;
+		PFftab[fd].hdrchanged = TRUE;
+	}
+	else {
+		/* Free list empty, allocate one more page from the file */
+		*pagenum = PFftab[fd].hdr.numpages;
+		if ((error=PFbufAlloc(fd,*pagenum,&fpage,PFwritefcn))!= PFE_OK)
+			/* can't allocate a page */
+			return(error);
+	
+		/* increment # of pages for this file */
+		PFftab[fd].hdr.numpages++;
+		PFftab[fd].hdrchanged = TRUE;
+
+		/* mark this page dirty */
+		if ((error=PFbufUsed(fd,*pagenum))!= PFE_OK){
+			printf("internal error: PFalloc()\n");
+			exit(1);
+		}
+
+	}
+
+	/* zero out the page. Seems to be a nice thing to do,
+	at least for debugging. */
+	/*
+	bzero(fpage->pagebuf,PF_PAGE_SIZE);
+	*/
+
+	/* Mark the new page used */
+	fpage->nextfree = PF_PAGE_USED;
+
+	/* set return value */
+	*pagebuf = fpage->pagebuf;
+	
+	return(PFE_OK);
+}
+
+
+int PF_GetNextPage(int fd, int *pagenum, char **pagebuf){
+    int temppage;	/* page number to scan for next valid page */
+int error;	/* error code */
+PFfpage *fpage;	/* pointer to file page */
+
+	if (PFinvalidFd(fd)){
+		PFerrno = PFE_FD;
+		return(PFerrno);
+	}
+
+
+	if (*pagenum < -1 || *pagenum >= PFftab[fd].hdr.numpages){
+		PFerrno = PFE_INVALIDPAGE;
+		return(PFerrno);
+	}
+
+	/* scan the file until a valid used page is found */
+	for (temppage= *pagenum+1;temppage<PFftab[fd].hdr.numpages;temppage++){
+		if ( (error=PFbufGet(fd,temppage,&fpage,PFreadfcn,
+					PFwritefcn))!= PFE_OK)
+			return(error);
+		else if (fpage->nextfree == PF_PAGE_USED){
+			/* found a used page */
+			*pagenum = temppage;
+			*pagebuf = (char *)fpage->pagebuf;
+			return(PFE_OK);
+		}
+
+		/* page is free, unfix it */
+		if ((error=PFbufUnfix(fd,temppage,FALSE))!= PFE_OK)
+			return(error);
+	}
+
+	/* No valid used page found */
+	PFerrno = PFE_EOF;
+	return(PFerrno);
+}
+
+
+int PF_UnfixPage(int fd, int pagenum, int dirty){
+    if (PFinvalidFd(fd)){
+		PFerrno = PFE_FD;
+		return(PFerrno);
+	}
+
+	if (PFinvalidPagenum(fd,pagenum)){
+		PFerrno = PFE_INVALIDPAGE;
+		return(PFerrno);
+	}
+
+	return(PFbufUnfix(fd,pagenum,dirty));
+}
+
+int PF_DisposePage(int fd, int pagenum) {
+    PFfpage *fpage;	/* pointer to file page */
+int error;
+
+	if (PFinvalidFd(fd)){
+		PFerrno = PFE_FD;
+		return(PFerrno);
+	}
+
+	if (PFinvalidPagenum(fd,pagenum)){
+		PFerrno = PFE_INVALIDPAGE;
+		return(PFerrno);
+	}
+
+	if ((error=PFbufGet(fd,pagenum,&fpage,PFreadfcn,PFwritefcn))!= PFE_OK)
+		/* can't get this page */
+		return(error);
+	
+	if (fpage->nextfree != PF_PAGE_USED){
+		/* this page already freed */
+		if (PFbufUnfix(fd,pagenum,FALSE)!= PFE_OK){
+			printf("internal error: PFdispose()\n");
+			exit(1);
+		}
+		PFerrno = PFE_PAGEFREE;
+		return(PFerrno);
+	}
+
+	/* put this page into the free list */
+	fpage->nextfree = PFftab[fd].hdr.firstfree;
+	PFftab[fd].hdr.firstfree = pagenum;
+	PFftab[fd].hdrchanged = TRUE;
+
+	/* unfix this page */
+	return(PFbufUnfix(fd,pagenum,TRUE));
+}
+
+int PF_GetThisPage(int fd, int pagenum, char **pagebuf)
+{
+    int error;
+    PFfpage *fpage;
+    
+        if (PFinvalidFd(fd)){
+            PFerrno = PFE_FD;
+            return(PFerrno);
+        }
+    
+        if (PFinvalidPagenum(fd,pagenum)){
+            PFerrno = PFE_INVALIDPAGE;
+            return(PFerrno);
+        }
+    
+        if ( (error=PFbufGet(fd,pagenum,&fpage,PFreadfcn,PFwritefcn))!= PFE_OK){
+            if (error== PFE_PAGEFIXED)
+                *pagebuf = fpage->pagebuf;
+            return(error);
+        }
+    
+        if (fpage->nextfree == PF_PAGE_USED){
+            /* page is used*/
+            *pagebuf = (char *)fpage->pagebuf;
+            return(PFE_OK);
+        }
+        else {
+            /* invalid page */
+            if (PFbufUnfix(fd,pagenum,FALSE)!= PFE_OK){
+                printf("internal error:PFgetThis()\n");
+                exit(1);
+            }
+            PFerrno = PFE_INVALIDPAGE;
+            return(PFerrno);
+        }
+}
+
+int PF_GetFirstPage(int fd, int *pagenum, char **pagebuf)
+{
+    *pagenum = -1;
+	return(PF_GetNextPage(fd,pagenum,pagebuf));
+}
+
 
 /****************************************************************************
 SPECIFICATIONS:
@@ -342,7 +584,7 @@ void PF_PrintError( char *s)
         "Incomplete read of page from file",
         "Incomplete write of page to file",
         "Incomplete read of header from file",
-        "Incomplete write of header from file",
+        "Incomplete write of header to file",
         "Invalid page number",
         "File already open",
         "File table full",
@@ -361,4 +603,3 @@ void PF_PrintError( char *s)
     else
         fprintf(stderr, "\n");
 }
-

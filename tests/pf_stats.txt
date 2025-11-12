@@ -1,0 +1,30 @@
+=== LRU create 2000 pages ===
+time_ms=3285.270 logical_reads=0 logical_writes=2000 physical_reads=0 physical_writes=1980 page_alloc=2000 page_fix=2000 page_unfix=5980 page_evicted=1980 avg_space_util=0.00
+
+=== LRU mix R=10000 W=0 (PF_MAX_BUFS=20) ===
+time_ms=81.466 logical_reads=10000 logical_writes=0 physical_reads=20000 physical_writes=20 page_alloc=0 page_fix=10000 page_unfix=20000 page_evicted=10000 avg_space_util=0.00
+
+=== LRU mix R=7500 W=2500 (PF_MAX_BUFS=20) ===
+time_ms=3755.785 logical_reads=10000 logical_writes=0 physical_reads=20000 physical_writes=2480 page_alloc=0 page_fix=10000 page_unfix=20000 page_evicted=10000 avg_space_util=0.00
+
+=== LRU mix R=5000 W=5000 (PF_MAX_BUFS=20) ===
+time_ms=14194.660 logical_reads=10000 logical_writes=0 physical_reads=20000 physical_writes=5000 page_alloc=0 page_fix=10000 page_unfix=20000 page_evicted=10000 avg_space_util=0.00
+
+=== LRU mix R=2500 W=7500 (PF_MAX_BUFS=20) ===
+time_ms=32923.224 logical_reads=10000 logical_writes=0 physical_reads=20000 physical_writes=7500 page_alloc=0 page_fix=10000 page_unfix=20000 page_evicted=10000 avg_space_util=0.00
+
+=== LRU mix R=0 W=10000 (PF_MAX_BUFS=20) ===
+time_ms=40854.298 logical_reads=10000 logical_writes=0 physical_reads=20000 physical_writes=10000 page_alloc=0 page_fix=10000 page_unfix=20000 page_evicted=10000 avg_space_util=0.00
+
+=== MRU create 2000 pages ===
+time_ms=7361.124 logical_reads=0 logical_writes=2000 physical_reads=0 physical_writes=1980 page_alloc=2000 page_fix=2000 page_unfix=5980 page_evicted=1980 avg_space_util=0.00
+
+=== MRU mix R=10000 W=0 (PF_MAX_BUFS=20) ===
+time_ms=72.186 logical_reads=10000 logical_writes=0 physical_reads=19806 physical_writes=20 page_alloc=0 page_fix=10000 page_unfix=19903 page_evicted=9903 avg_space_util=0.00
+
+=== MRU mix R=7500 W=2500 (PF_MAX_BUFS=20) ===
+time_ms=8042.455 logical_reads=10000 logical_writes=0 physical_reads=19816 physical_writes=2479 page_alloc=0 page_fix=10000 page_unfix=19908 page_evicted=9908 avg_space_util=0.00
+
+=== MRU mix R=5000 W=5000 (PF_MAX_BUFS=20) ===
+time_ms=20308.556 logical_reads=10000 logical_writes=0 physical_reads=19814 physical_writes=4972 page_alloc=0 page_fix=10000 page_unfix=19907 page_evicted=9907 avg_space_util=0.00
+

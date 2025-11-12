@@ -42,6 +42,7 @@
 /* Global error variable */
 extern int PFerrno;
 
+extern int USE_MRU;
 /**************** Function Declarations ****************/
 
 /* Initialization and utilities */

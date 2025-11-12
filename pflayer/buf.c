@@ -44,70 +44,98 @@ void PFbufUnlink(PFbpage *bpage) {
         bpage->prevpage->nextpage = bpage->nextpage;
 
     bpage->prevpage = bpage->nextpage = NULL;
+    PF_page_unfix++;
 }
 
-#define USE_MRU 0   /* 0 = LRU, 1 = MRU */
+int USE_MRU = 0; 
 
 /* Internal buffer allocation routine */
+/* Internal buffer allocation routine */
 static int PFbufInternalAlloc(PFbpage **bpage, int (*writefcn)(int, int, PFfpage *)) {
-    PFbpage *tbpage;
+    PFbpage *tbpage = NULL;
     int error;
 
+    /* Case 1: Reuse a free page from the free list */
     if (PFfreebpage != NULL) {
         *bpage = PFfreebpage;
         PFfreebpage = (*bpage)->nextpage;
-    } 
+    }
+
+    /* Case 2: Allocate a new page if buffer not yet full */
     else if (PFnumbpage < PF_MAX_BUFS) {
-        if ((*bpage = (PFbpage *)malloc(sizeof(PFbpage))) == NULL) {
-            *bpage = NULL;
+        *bpage = (PFbpage *)malloc(sizeof(PFbpage));
+        if (*bpage == NULL) {
             PFerrno = PFE_NOMEM;
+            *bpage = NULL;
             return PFerrno;
         }
-        PFnumbpage++;
-    } 
-    else {
-        /* Choose a victim page using LRU or MRU */
-        *bpage = NULL;
 
+        PFnumbpage++;
+
+        /* Initialize fields for new page */
+        (*bpage)->nextpage = (*bpage)->prevpage = NULL;
+        (*bpage)->fd = -1;
+        (*bpage)->page = -1;
+        (*bpage)->dirty = FALSE;
+        (*bpage)->fixed = FALSE;
+    }
+
+    /* Case 3: Need to evict a page using LRU or MRU */
+    else {
         if (USE_MRU) {
-            /* ---------------- MRU: Evict from HEAD ---------------- */
+            /* MRU policy: evict from head */
             for (tbpage = PFfirstbpage; tbpage != NULL; tbpage = tbpage->nextpage) {
                 if (!tbpage->fixed)
                     break;
             }
-        } 
-        else {
-            /* ---------------- LRU: Evict from TAIL ---------------- */
+        } else {
+            /* LRU policy: evict from tail */
             for (tbpage = PFlastbpage; tbpage != NULL; tbpage = tbpage->prevpage) {
                 if (!tbpage->fixed)
                     break;
             }
         }
 
+        /* No available victim (all pages pinned) */
         if (tbpage == NULL) {
             PFerrno = PFE_NOBUF;
+            *bpage = NULL;
             return PFerrno;
         }
 
-        /* Write page back if needed */
-        if (tbpage->dirty && 
-            (error = (*writefcn)(tbpage->fd, tbpage->page, &tbpage->fpage)) != PFE_OK)
-            return error;
+        /* If the victim page is dirty, write it to disk */
+        if (tbpage->dirty) {
+            error = (*writefcn)(tbpage->fd, tbpage->page, &tbpage->fpage);
+            if (error != PFE_OK) {
+                /* Keep consistent state and return */
+                return error;
+            }
+            tbpage->dirty = FALSE;
+        }
 
-        tbpage->dirty = FALSE;
-
+        /* Remove victim from hash and used list */
         if ((error = PFhashDelete(tbpage->fd, tbpage->page)) != PFE_OK)
             return error;
 
-        /* Remove it from the used list, will be reused */
         PFbufUnlink(tbpage);
+
+        /* Reset all metadata before reuse */
+        tbpage->fd = -1;
+        tbpage->page = -1;
+        tbpage->fixed = FALSE;
+        tbpage->dirty = FALSE;
+        tbpage->nextpage = tbpage->prevpage = NULL;
+
+        PF_page_evicted++;
         *bpage = tbpage;
     }
 
-    /* Put newly allocated page at head (recently used) */
+    /* Always insert new/reused page at head (most recently used) */
     PFbufLinkHead(*bpage);
+
     return PFE_OK;
 }
+
 
 
 /* Get a page from the file and fix it in buffer */
@@ -136,12 +164,15 @@ int PFbufGet(int fd, int pagenum, PFfpage **fpage, int (*readfcn)(int, int, PFfp
 
         bpage->fd = fd;
         bpage->page = pagenum;
+        PF_physical_reads++;
         bpage->dirty = FALSE;
     } else if (bpage->fixed) {
         *fpage = &bpage->fpage;
         PFerrno = PFE_PAGEFIXED;
         return PFerrno;
     }
+    PF_logical_reads++;
+    PF_page_fix++;
 
     bpage->fixed = TRUE;
     *fpage = &bpage->fpage;
@@ -192,6 +223,9 @@ int PFbufAlloc(int fd, int pagenum, PFfpage **fpage, int (*writefcn)(int, int, P
         PFbufInsertFree(bpage);
         return error;
     }
+    PF_page_alloc++;
+    PF_logical_writes++;
+    PF_page_fix++;
 
     bpage->fd = fd;
     bpage->page = pagenum;

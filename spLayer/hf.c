@@ -102,65 +102,107 @@ static int HF_UnfixMeta(int fd, int dirty)
 /* Add data page 'p' to free list head if not already listed */
 static int HF_FreeListAdd(int fd, int p)
 {
-    int err; char* metaPg; char* pg;
-    if ((err = HF_LoadMeta(fd, &metaPg)) != PFE_OK) return err;
+    int err; 
+    char* pg;
 
-    HF_Meta* m = HF_META(metaPg);
-    /* check current page state */
-    if ((err = PF_GetThisPage(fd, p, &pg)) != PFE_OK) { (void)HF_UnfixMeta(fd, 0); return err; }
+    if ((err = PF_GetThisPage(fd, p, &pg)) != PFE_OK)
+        return err;
 
     HF_PageHeader* h = HF_PHEAD(pg);
-    if (h->nextFreePage == HF_NO_PAGE) {
-        h->nextFreePage = m->firstFreePage;
-        m->firstFreePage = p;
-        if ((err = PF_UnfixPage(fd, p, 1)) != PFE_OK) { (void)HF_UnfixMeta(fd, 0); return err; }
-        return HF_UnfixMeta(fd, 1);
-    } else {
-        /* already on the list */
+
+    // Already listed
+    if (h->nextFreePage != HF_NO_PAGE)
+        return PF_UnfixPage(fd, p, 0);
+
+    // Load meta briefly
+    char* metaPg;
+    if ((err = HF_LoadMeta(fd, &metaPg)) != PFE_OK) {
         (void)PF_UnfixPage(fd, p, 0);
-        return HF_UnfixMeta(fd, 0);
+        return err;
     }
+
+    int head = HF_META(metaPg)->firstFreePage;
+    (void)HF_UnfixMeta(fd, 0); // Unfix meta before touching data page
+
+    // Link into free list
+    h->nextFreePage = head;
+    if ((err = PF_UnfixPage(fd, p, 1)) != PFE_OK)
+        return err;
+
+    // Reopen meta just to write new head
+    if ((err = HF_LoadMeta(fd, &metaPg)) != PFE_OK)
+        return err;
+    HF_META(metaPg)->firstFreePage = p;
+    return HF_UnfixMeta(fd, 1);
 }
+
 
 /* Remove page 'p' from free list if listed */
 static int HF_FreeListRemove(int fd, int p)
 {
-    int err; char* metaPg;
-    if ((err = HF_LoadMeta(fd, &metaPg)) != PFE_OK) return err;
-    HF_Meta* m = HF_META(metaPg);
+    int err; 
+    char* metaPg;
 
-    if (m->firstFreePage == p) {
-        char* pg; if ((err = PF_GetThisPage(fd, p, &pg)) != PFE_OK) { (void)HF_UnfixMeta(fd,0); return err; }
+    if ((err = HF_LoadMeta(fd, &metaPg)) != PFE_OK)
+        return err;
+
+    HF_Meta* m = HF_META(metaPg);
+    int head = m->firstFreePage;
+    if ((err = HF_UnfixMeta(fd, 0)) != PFE_OK)
+        return err;
+
+    // Case 1: Removing head of list
+    if (head == p) {
+        char* pg;
+        if ((err = PF_GetThisPage(fd, p, &pg)) != PFE_OK)
+            return err;
+
         HF_PageHeader* h = HF_PHEAD(pg);
-        m->firstFreePage = h->nextFreePage;
+        int newHead = h->nextFreePage;
         h->nextFreePage = HF_NO_PAGE;
-        if ((err = PF_UnfixPage(fd, p, 1)) != PFE_OK) { (void)HF_UnfixMeta(fd,0); return err; }
+
+        if ((err = PF_UnfixPage(fd, p, 1)) != PFE_OK)
+            return err;
+
+        if ((err = HF_LoadMeta(fd, &metaPg)) != PFE_OK)
+            return err;
+
+        HF_META(metaPg)->firstFreePage = newHead;
         return HF_UnfixMeta(fd, 1);
     }
 
-    /* walk the list to unlink p */
-    int prev = m->firstFreePage;
+    // Case 2: Walk the list without meta pinned
+    int prev = head;
     while (prev != HF_NO_PAGE) {
-        char* prevPg; if ((err = PF_GetThisPage(fd, prev, &prevPg)) != PFE_OK) { (void)HF_UnfixMeta(fd,0); return err; }
+        char* prevPg;
+        if ((err = PF_GetThisPage(fd, prev, &prevPg)) != PFE_OK)
+            return err;
+
         HF_PageHeader* ph = HF_PHEAD(prevPg);
         int next = ph->nextFreePage;
 
         if (next == p) {
-            char* curPg; if ((err = PF_GetThisPage(fd, p, &curPg)) != PFE_OK) { (void)PF_UnfixPage(fd, prev,0); (void)HF_UnfixMeta(fd,0); return err; }
+            // Found target; unlink
+            char* curPg;
+            if ((err = PF_GetThisPage(fd, p, &curPg)) != PFE_OK) {
+                (void)PF_UnfixPage(fd, prev, 0);
+                return err;
+            }
+
             HF_PageHeader* ch = HF_PHEAD(curPg);
             ph->nextFreePage = ch->nextFreePage;
             ch->nextFreePage = HF_NO_PAGE;
 
-            if ((err = PF_UnfixPage(fd, p, 1)) != PFE_OK) { (void)PF_UnfixPage(fd, prev,1); (void)HF_UnfixMeta(fd,0); return err; }
-            if ((err = PF_UnfixPage(fd, prev, 1)) != PFE_OK) { (void)HF_UnfixMeta(fd,0); return err; }
-            return HF_UnfixMeta(fd, 1);
+            int e1 = PF_UnfixPage(fd, p, 1);
+            int e2 = PF_UnfixPage(fd, prev, 1);
+            return (e1 != PFE_OK) ? e1 : e2;
         }
 
         (void)PF_UnfixPage(fd, prev, 0);
         prev = next;
     }
 
-    return HF_UnfixMeta(fd, 0); /* not found -> already not listed */
+    return PFE_OK;
 }
 
 /* Update page position relative to free-list based on free bytes */
@@ -168,17 +210,18 @@ static int HF_FreeListUpdate(int fd, int p)
 {
     int err; char* pg;
     if ((err = PF_GetThisPage(fd, p, &pg)) != PFE_OK) return err;
-    HF_PageHeader* h = HF_PHEAD(pg);
 
+    HF_PageHeader* h = HF_PHEAD(pg);
     int eff = HF_EffectiveFreeForInsert(pg);
     int listed = (h->nextFreePage != HF_NO_PAGE);
 
-    (void)PF_UnfixPage(fd, p, 0);
+    (void)PF_UnfixPage(fd, p, 0); /* <-- unfix BEFORE branching */
 
     if (eff > 0 && !listed)      return HF_FreeListAdd(fd, p);
     else if (eff <= 0 && listed) return HF_FreeListRemove(fd, p);
     else                         return PFE_OK;
 }
+
 
 /* Initialize a fresh data page header */
 static void HF_InitDataPage(char* page)
@@ -226,44 +269,64 @@ static int HF_EnsureFirstDataPage(int fd, int* outPageNum)
 /* Find (or allocate) a page with enough free space for len bytes + 1 slot */
 static int HF_FindTargetPage(int fd, int len, int* outPage)
 {
-    int err; char* metaPg;
-    if ((err = HF_LoadMeta(fd, &metaPg)) != PFE_OK) return err;
-    HF_Meta* m = HF_META(metaPg);
+    int err; 
+    char* metaPg;
 
-    int p = m->firstFreePage;
+    // 1. Load meta page briefly just to read head of free list
+    if ((err = HF_LoadMeta(fd, &metaPg)) != PFE_OK)
+        return err;
+
+    HF_Meta* m = HF_META(metaPg);
+    int head = m->firstFreePage;
+
+    // Unfix meta page immediately — critical fix!
+    if ((err = HF_UnfixMeta(fd, 0)) != PFE_OK)
+        return err;
+
+    // 2. Walk the free list without holding meta page
+    int p = head;
     while (p != HF_NO_PAGE) {
-        char* pg; if ((err = PF_GetThisPage(fd, p, &pg)) != PFE_OK) { (void)HF_UnfixMeta(fd,0); return err; }
-        int eff = HF_EffectiveFreeForInsert(pg);
-        if (eff >= len) {
+        char* pg;
+        if ((err = PF_GetThisPage(fd, p, &pg)) != PFE_OK)
+            return err;
+
+        if (HF_EffectiveFreeForInsert(pg) >= len) {
             (void)PF_UnfixPage(fd, p, 0);
             *outPage = p;
-            return HF_UnfixMeta(fd, 0);
+            return PFE_OK;
         }
-        /* move along free list */
+
         HF_PageHeader* h = HF_PHEAD(pg);
         int next = h->nextFreePage;
         (void)PF_UnfixPage(fd, p, 0);
         p = next;
     }
 
-    /* allocate new page */
-    int newp; char* newpg;
-    if ((err = PF_AllocPage(fd, &newp, &newpg)) != PFE_OK) { (void)HF_UnfixMeta(fd, 0); return err; }
+    // 3. If no page found, allocate a new one
+    int newp; 
+    char* newpg;
+    if ((err = PF_AllocPage(fd, &newp, &newpg)) != PFE_OK)
+        return err;
+
     HF_InitDataPage(newpg);
-    if ((err = PF_UnfixPage(fd, newp, 1)) != PFE_OK) { (void)HF_UnfixMeta(fd, 0); return err; }
 
-    /* link to free list head */
-    int ff = m->firstFreePage;
+    // Set nextFreePage to old head
+    HF_PageHeader* nh = HF_PHEAD(newpg);
+    nh->nextFreePage = head;
+
+    if ((err = PF_UnfixPage(fd, newp, 1)) != PFE_OK)
+        return err;
+
+    // 4. Re-fix meta to update head pointer
+    if ((err = HF_LoadMeta(fd, &metaPg)) != PFE_OK)
+        return err;
+    m = HF_META(metaPg);
     m->firstFreePage = newp;
-
-    /* set new page's next to old head */
-    char* npg; if ((err = PF_GetThisPage(fd, newp, &npg)) != PFE_OK) { (void)HF_UnfixMeta(fd, 0); return err; }
-    HF_PageHeader* nh = HF_PHEAD(npg);
-    nh->nextFreePage = ff;
-    if ((err = PF_UnfixPage(fd, newp, 1)) != PFE_OK) { (void)HF_UnfixMeta(fd, 0); return err; }
+    if ((err = HF_UnfixMeta(fd, 1)) != PFE_OK)
+        return err;
 
     *outPage = newp;
-    return HF_UnfixMeta(fd, 1);
+    return PFE_OK;
 }
 
 /* ================================
@@ -330,40 +393,54 @@ int HF_InsertRecord(int fd, const void* rec, int len, HF_RID* outRid)
     HF_PageHeader* h = HF_PHEAD(page);
 
     /* compute where to place record and slot */
-    if (HF_EffectiveFreeForInsert(page) < len) {
+    int eff = HF_EffectiveFreeForInsert(page);
+    if (eff < len) {
         (void)PF_UnfixPage(fd, p, 0);
-        return PFE_NOBUF; /* not enough space (race); caller may retry */
+        return PFE_NOBUF; /* race; caller may retry */
     }
 
-    /* Place record at end of free space */
+    /* Reserve space for the *slot* first (directory grows down) */
+    int newSlotIndex = h->slotCount; /* zero-based index of new slot */
+    int slotPos = PF_PAGE_SIZE - (int)sizeof(HF_Slot) * (newSlotIndex + 1);
+
+    /* Place record at the top of free space (grows down) */
     int newRecEnd   = (int)h->freeEnd;
     int newRecStart = newRecEnd - len;
 
-    /* Copy bytes */
+    /* Safety: record must not overlap the slot directory we just reserved */
+    if (newRecStart < (int)h->freeStart || newRecStart < slotPos) {
+        (void)PF_UnfixPage(fd, p, 0);
+        return PFE_NOBUF;
+    }
+
+    /* Copy record bytes */
     memcpy(page + newRecStart, rec, (size_t)len);
 
-    /* Create / append slot */
-    HF_Slot* slot = HF_SLOT(page, h->slotCount); /* new slot index = slotCount */
+    /* Write the slot into its reserved position */
+    HF_Slot* slot = (HF_Slot*)(page + slotPos);
     slot->offset  = (short)newRecStart;
     slot->length  = (short)len;
 
-    /* Advance slot count and shrink free areas */
+    /* Update header: one more slot; free grows up and down */
     h->slotCount += 1;
-    h->freeEnd   = (short)newRecStart;                /* consumed from the top */
+    h->freeEnd    = (short)newRecStart;      /* consumed by record */
+    /* freeStart unchanged here (grows up when you allocate in that region);
+       slot directory consumption is accounted by using slotPos above. */
 
-    /* Decide free-list membership after change */
-    int dirty = 1;
-    if ((err = PF_UnfixPage(fd, p, dirty)) != PFE_OK) return err;
+    /* Capture RID BEFORE unfixing (don’t deref page after unfix) */
+    HF_RID ridLocal;
+    ridLocal.page = p;
+    ridLocal.slot = (short)newSlotIndex;
 
-    /* Update free list membership (may add/remove) */
+    if ((err = PF_UnfixPage(fd, p, 1)) != PFE_OK) return err;
+
+    /* Update free list membership */
     if ((err = HF_FreeListUpdate(fd, p)) != PFE_OK) return err;
 
-    if (outRid) {
-        outRid->page = p;
-        outRid->slot = (short)(h->slotCount - 1);
-    }
+    if (outRid) *outRid = ridLocal;
     return PFE_OK;
 }
+
 
 /* Fetch record by RID; caller supplies buffer and capacity in *inoutLen */
 int HF_GetRecord(int fd, HF_RID rid, void* outBuf, int* inoutLen)

@@ -42,17 +42,18 @@
 /* Global error variable */
 extern int PFerrno;
 
+extern int USE_MRU;
 /**************** Function Declarations ****************/
 
 /* Initialization and utilities */
-void PF_Init(void);
-void PF_PrintError( char *s);
+void PF_Init(void); // initialize pf file table and pf hash table
+void PF_PrintError( char *s); // print the last pf error with a given string
 
 /* File operations */
-int PF_CreateFile(const char *fname);
-int PF_DestroyFile(const char *fname);
-int PF_OpenFile(const char *fname);
-int PF_CloseFile(int fd);
+int PF_CreateFile(const char *fname); // create a paged file called "fname" with file header initialized to zero
+int PF_DestroyFile(const char *fname); // destroy the paged file named "fname" if it is not open
+int PF_OpenFile(const char *fname); // open the paged file named "fname" and return its file descriptor
+int PF_CloseFile(int fd); // close the paged file with file descriptor "fd" and write back the header if it has been changed
 
 /* Page operations */
 int PF_AllocPage(int fd, int *pagenum, char **buf);

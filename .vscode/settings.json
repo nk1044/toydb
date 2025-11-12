@@ -3,6 +3,8 @@
         "*.dbclient-js": "javascript",
         "stdio.h": "c",
         "pftypes.h": "c",
-        "pf.h": "c"
+        "pf.h": "c",
+        "utils.h": "c",
+        "types.h": "c"
     }
 }
