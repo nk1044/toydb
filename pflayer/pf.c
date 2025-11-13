@@ -182,23 +182,20 @@ void PF_Init(void)
         PFftab[i].fname = NULL;
     }
 }
-
-/****************************************************************************
-SPECIFICATIONS:
-	Create a paged file called "fname". The file must not exist before.
-
-RETURN VALUE:
-	PFE_OK if OK
-	PF error code otherwise
-*****************************************************************************/
+/* Create the paged file */
 int PF_CreateFile(const char *fname)
 {
-    int fd; // file descriptor
+    int fd; // unix file descriptor
     PFhdr_str hdr; // file header (in-memory) stores first free page and numpages
+    ssize_t written;
 
-    /* check if file already exists */
-    if ((fd = open(fname, O_CREAT | O_EXCL | O_WRONLY, 0664)) < 0) {
+    /* check if file already exists and create it atomically */
+    /* use O_RDWR so file is created read/write (avoid platform quirks) */
+    fd = open(fname, O_CREAT | O_EXCL | O_RDWR, 0664);
+    if (fd < 0) {
         PFerrno = PFE_UNIX;
+        /* give a helpful perror so the caller can see the OS errno message */
+        perror("PF_CreateFile: open");
         return PFerrno;
     }
 
@@ -206,9 +203,20 @@ int PF_CreateFile(const char *fname)
     hdr.numpages = 0;
 
     /* write the header to the file using PF_HDR_SIZE so reading uses same size */
-    ssize_t written = write(fd, (char *)&hdr, PF_HDR_SIZE);
+    written = write(fd, (char *)&hdr, PF_HDR_SIZE);
     if (written != (ssize_t)PF_HDR_SIZE) {
         PFerrno = (written < 0) ? PFE_UNIX : PFE_HDRWRITE;
+        perror("PF_CreateFile: write header");
+        close(fd);
+        /* remove incomplete file */
+        unlink(fname);
+        return PFerrno;
+    }
+
+    /* make sure it's on disk */
+    if (fsync(fd) == -1) {
+        PFerrno = PFE_UNIX;
+        perror("PF_CreateFile: fsync");
         close(fd);
         unlink(fname);
         return PFerrno;
@@ -216,11 +224,57 @@ int PF_CreateFile(const char *fname)
 
     if (close(fd) == -1) {
         PFerrno = PFE_UNIX;
+        perror("PF_CreateFile: close");
+        unlink(fname);
         return PFerrno;
     }
 
     return PFE_OK;
 }
+
+/* Open the paged file named "fname". Returns PF fd (index into PFftab) or PF error */
+int PF_OpenFile(const char *fname)
+{
+    int fd;
+
+    /* if file already open, return error */
+    if (PFtabFindFname(fname) != -1) {
+        PFerrno = PFE_FILEOPEN;
+        return PFerrno;
+    }
+
+    if ((fd = PFftabFindFree()) < 0) { // no free entry in PFftab then error
+        PFerrno = PFE_FTABFULL;
+        return PFerrno;
+    }
+
+    if ((PFftab[fd].unixfd = open(fname, O_RDWR)) < 0) { // open file fails then error
+        PFerrno = PFE_UNIX;
+        perror("PF_OpenFile: open");
+        return PFerrno;
+    }
+
+    /* read the file header */
+    ssize_t count;
+    if ((count = read(PFftab[fd].unixfd, (char *)&PFftab[fd].hdr, PF_HDR_SIZE)) != (ssize_t)PF_HDR_SIZE) {
+        PFerrno = (count < 0) ? PFE_UNIX : PFE_HDRREAD;
+        if (count < 0) perror("PF_OpenFile: read header");
+        close(PFftab[fd].unixfd);
+        return PFerrno;
+    }
+
+    PFftab[fd].hdrchanged = 0; /* header not changed */
+
+    if ((PFftab[fd].fname = savestr(fname)) == NULL) {
+        close(PFftab[fd].unixfd);
+        PFerrno = PFE_NOMEM;
+        return PFerrno;
+    }
+
+    return fd;
+}
+
+
 
 /****************************************************************************
 SPECIFICATIONS:
@@ -244,46 +298,6 @@ int PF_DestroyFile(const char *fname)
     }
 
     return PFE_OK;
-}
-
-/****************************************************************************
-SPECIFICATIONS:
-	Open the paged file named "fname".
-
-RETURN VALUE:
-	File descriptor >= 0 if success, PF error code otherwise
-*****************************************************************************/
-int PF_OpenFile(const char *fname)
-{
-    int fd;
-
-    if ((fd = PFftabFindFree()) < 0) { // no free entry in PFftab then error
-        PFerrno = PFE_FTABFULL;
-        return PFerrno;
-    }
-
-    if ((PFftab[fd].unixfd = open(fname, O_RDWR)) < 0) { // open file fails then error
-        PFerrno = PFE_UNIX;
-        return PFerrno;
-    }
-
-    /* read the file header */
-    ssize_t count;
-    if ((count = read(PFftab[fd].unixfd, (char *)&PFftab[fd].hdr, PF_HDR_SIZE)) != (ssize_t)PF_HDR_SIZE) {
-        PFerrno = (count < 0) ? PFE_UNIX : PFE_HDRREAD;
-        close(PFftab[fd].unixfd);
-        return PFerrno;
-    }
-
-    PFftab[fd].hdrchanged = 0; /* header not changed */
-
-    if ((PFftab[fd].fname = savestr(fname)) == NULL) {
-        close(PFftab[fd].unixfd);
-        PFerrno = PFE_NOMEM;
-        return PFerrno;
-    }
-
-    return fd;
 }
 
 /****************************************************************************
