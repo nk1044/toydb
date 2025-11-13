@@ -20,6 +20,8 @@ Thumbs.db
 *.so
 *.dll
 *.dylib
+*.db
+*.hf
 
 # Ignore executables and test binaries
 testpf
@@ -29,6 +31,11 @@ test2
 test3
 *.out
 a.out
+test_pf_rw_mix
+pf_testfile.db
+file1
+file2
+testpf
 
 # Ignore PF layer intermediate archive
 pflayer.o
@@ -53,3 +60,6 @@ Thumbs.db
 # Ignore user-specific config
 .vscode/
 .idea/
+
+
+pf_stats.txt
