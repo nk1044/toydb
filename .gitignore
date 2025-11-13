@@ -22,7 +22,7 @@ Thumbs.db
 *.dylib
 *.db
 *.hf
-
+*.tbl
 # Ignore executables and test binaries
 testpf
 testhash
