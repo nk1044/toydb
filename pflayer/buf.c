@@ -44,7 +44,6 @@ void PFbufUnlink(PFbpage *bpage) {
         bpage->prevpage->nextpage = bpage->nextpage;
 
     bpage->prevpage = bpage->nextpage = NULL;
-    PF_page_unfix++;
 }
 
 int USE_MRU = 0; 
@@ -82,6 +81,7 @@ static int PFbufInternalAlloc(PFbpage **bpage, int (*writefcn)(int, int, PFfpage
 
     /* Case 3: Need to evict a page using LRU or MRU */
     else {
+        PF_page_evicted++;
         if (USE_MRU) {
             /* MRU policy: evict from head */
             for (tbpage = PFfirstbpage; tbpage != NULL; tbpage = tbpage->nextpage) {
@@ -125,14 +125,12 @@ static int PFbufInternalAlloc(PFbpage **bpage, int (*writefcn)(int, int, PFfpage
         tbpage->fixed = FALSE;
         tbpage->dirty = FALSE;
         tbpage->nextpage = tbpage->prevpage = NULL;
-
-        PF_page_evicted++;
         *bpage = tbpage;
     }
 
     /* Always insert new/reused page at head (most recently used) */
     PFbufLinkHead(*bpage);
-
+    PF_page_alloc++;
     return PFE_OK;
 }
 
@@ -164,7 +162,6 @@ int PFbufGet(int fd, int pagenum, PFfpage **fpage, int (*readfcn)(int, int, PFfp
 
         bpage->fd = fd;
         bpage->page = pagenum;
-        PF_physical_reads++;
         bpage->dirty = FALSE;
     } else if (bpage->fixed) {
         *fpage = &bpage->fpage;
@@ -172,7 +169,6 @@ int PFbufGet(int fd, int pagenum, PFfpage **fpage, int (*readfcn)(int, int, PFfp
         return PFerrno;
     }
     PF_logical_reads++;
-    PF_page_fix++;
 
     bpage->fixed = TRUE;
     *fpage = &bpage->fpage;
@@ -225,7 +221,6 @@ int PFbufAlloc(int fd, int pagenum, PFfpage **fpage, int (*writefcn)(int, int, P
     }
     PF_page_alloc++;
     PF_logical_writes++;
-    PF_page_fix++;
 
     bpage->fd = fd;
     bpage->page = pagenum;

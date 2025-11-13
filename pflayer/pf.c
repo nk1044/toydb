@@ -28,8 +28,6 @@ static PFftab_ele PFftab[PF_FTAB_SIZE];
 /***************************for stat********************** */
 unsigned long PF_physical_reads = 0;
 unsigned long PF_physical_writes = 0;
-unsigned long PF_page_fix = 0;       // pin
-unsigned long PF_page_unfix = 0;     // unpin
 unsigned long PF_page_alloc = 0;
 unsigned long PF_page_evicted = 0;
 unsigned long PF_logical_reads = 0;   

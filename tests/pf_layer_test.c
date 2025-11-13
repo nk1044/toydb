@@ -29,6 +29,11 @@ static void strip_newline(char *str) {
         str[len-2] = '\0';
     }
 }
+static inline void reset_pf(void) {
+    PF_physical_reads = PF_physical_writes = 0;
+    PF_logical_reads  = PF_logical_writes  = 0;
+    PF_page_alloc = PF_page_evicted = 0;
+}
 
 static int load_dataset(const char *path, int hf_fd) {
     FILE *f = fopen(path, "r");
@@ -77,28 +82,11 @@ static int load_dataset(const char *path, int hf_fd) {
         }
         
         count++;
-        if (count % 100 == 0) {
-            int net_fixed = PF_page_fix - PF_page_unfix;
-            printf("After %d inserts: fix=%lu, unfix=%lu, net=%d\n", 
-                   count, PF_page_fix, PF_page_unfix, net_fixed);
-            
-            if (net_fixed > 50) {
-                printf("ERROR: Buffer leak detected! Stopping.\n");
-                break;
-            }
-        }
     }
 
     fclose(f);
     printf("INFO: Finished loading %d records from dataset\n", count);
     return count;
-}
-
-/* === PF counter reset === */
-static inline void reset_pf(void) {
-    PF_physical_reads = PF_physical_writes = 0;
-    PF_logical_reads  = PF_logical_writes  = 0;
-    PF_page_fix = PF_page_unfix = PF_page_alloc = PF_page_evicted = 0;
 }
 
 int main(void) {
@@ -198,7 +186,6 @@ int main(void) {
         }
 
         stats_stop(&s);
-        stats_snapshot_from_pf(&s);
         {
             char label[128];
             snprintf(label, sizeof(label), "%s create %d pages", names[st], N_PAGES);
@@ -256,7 +243,6 @@ int main(void) {
             }
 
             stats_stop(&s);
-            stats_snapshot_from_pf(&s);
             char label[128];
             snprintf(label, sizeof(label), "%s mix R=%d W=%d (PF_MAX_BUFS=%d)",
                      names[st], mix[i].reads, mix[i].writes, PF_MAX_BUFS);

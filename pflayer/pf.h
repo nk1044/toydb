@@ -77,7 +77,7 @@ int PFbufUnfix(int fd, int pagenum, int dirty);
 int PFbufUsed(int fd, int pagenum);
 
 extern unsigned long PF_physical_reads, PF_physical_writes;
-extern unsigned long PF_page_fix, PF_page_unfix, PF_page_alloc, PF_page_evicted;
+extern unsigned long PF_page_alloc, PF_page_evicted;
 extern unsigned long PF_logical_reads, PF_logical_writes;
 
 

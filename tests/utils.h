@@ -14,7 +14,7 @@ typedef struct {
     struct timespec start_time, end_time;
     unsigned long logical_reads, logical_writes;
     unsigned long physical_reads, physical_writes;
-    unsigned long page_fix, page_unfix, page_alloc, page_evicted;
+    unsigned long  page_alloc, page_evicted;
     double avg_space_util;
 } Stats;
 
@@ -28,15 +28,13 @@ static inline void stats_reset(Stats *s) { memset(s, 0, sizeof(*s)); }
 
 extern unsigned long PF_physical_reads, PF_physical_writes;
 extern unsigned long PF_logical_reads, PF_logical_writes;
-extern unsigned long PF_page_fix, PF_page_unfix, PF_page_alloc, PF_page_evicted;
+extern unsigned long  PF_page_alloc, PF_page_evicted;
 
 static inline void stats_snapshot_from_pf(Stats *s) {
     s->physical_reads  = PF_physical_reads;
     s->physical_writes = PF_physical_writes;
     s->logical_reads   = PF_logical_reads;
     s->logical_writes  = PF_logical_writes;
-    s->page_fix        = PF_page_fix;
-    s->page_unfix      = PF_page_unfix;
     s->page_alloc      = PF_page_alloc;
     s->page_evicted    = PF_page_evicted;
 }
@@ -44,13 +42,29 @@ static inline void stats_snapshot_from_pf(Stats *s) {
 static inline void stats_dump(const char *filename, const char *label, Stats *s) {
     FILE *f = fopen(filename, "a");
     if (!f) return;
-    fprintf(f, "=== %s ===\n", label);
-    fprintf(f, "time_ms=%.3f logical_reads=%lu logical_writes=%lu physical_reads=%lu physical_writes=%lu "
-               "page_alloc=%lu page_fix=%lu page_unfix=%lu page_evicted=%lu avg_space_util=%.2f\n\n",
+
+    fprintf(f, "==================== %s ====================\n", label);
+    fprintf(f,
+        "Time (ms):           %.3f\n"
+        "Logical Reads:       %lu\n"
+        "Logical Writes:      %lu\n"
+        "Physical Reads:      %lu\n"
+        "Physical Writes:     %lu\n"
+        "Page Allocations:    %lu\n"
+        "Page Evictions:      %lu\n"
+        "Avg Space Util (%):  %.2f\n"
+        "---------------------------------------------\n\n",
         stats_elapsed_ms(s),
-        s->logical_reads, s->logical_writes,
-        s->physical_reads, s->physical_writes,
-        s->page_alloc, s->page_fix, s->page_unfix, s->page_evicted, s->avg_space_util);
+        s->logical_reads,
+        s->logical_writes,
+        s->physical_reads,
+        s->physical_writes,
+        s->page_alloc,
+        s->page_evicted,
+        s->avg_space_util
+    );
+
     fclose(f);
 }
+
 #endif
