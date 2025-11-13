@@ -23,7 +23,7 @@ HF_OBJS = $(HF_SRCS:.c=.o)
 ###############################################################################
 # Test File
 ###############################################################################
-TEST = hf_test
+TEST = testhf
 TEST_SRC = testhf.c
 TEST_OBJ = $(TEST_SRC:.c=.o)
 
@@ -53,3 +53,5 @@ $(PF_DIR)/%.o: $(PF_DIR)/%.c
 clean:
 	rm -f *.o
 	rm -f $(TEST)
+	rm -f *.tbl
+	rm -f *.hf

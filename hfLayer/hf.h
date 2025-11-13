@@ -1,50 +1,36 @@
 #ifndef HF_H
 #define HF_H
 
-#include "pf.h"
+#include "../pflayer/pf.h"
 
-/* ---------------------------------------
- * Heap File (HF) public API
- * -------------------------------------*/
+#define HF_SCAN_CLOSED 1
+#define HF_OK 0
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#define HF_MAX_FILE 20
 
-/* Record Identifier (RID) */
 typedef struct {
-    int   page;   /* PF page number */
-    short slot;   /* slot index (0-based) */
+    int pageNum;
+    int slotNum;
+    int recordLen;
 } HF_RID;
 
-/* Opaque scan handle */
 typedef struct {
-    int  fd;          /* HF file descriptor (PF fd) */
-    int  curPage;     /* current page for scan */
-    int  curSlot;     /* current slot index */
-    int  endOfScan;   /* boolean */
+    int fd;          // HF file descriptor
+    int curPage;     // current page number
+    int curSlot;     // current slot number
+    int totalPages;  // total pages in HF file
+    int isOpen;      // indicates scan is open
 } HF_Scan;
 
-/* ---- File operations ---- */
-int HF_CreateFile(const char* fname);
-int HF_DestroyFile(const char* fname);
-int HF_OpenFile(const char* fname);       /* returns PF fd */
-int HF_CloseFile(int fd);
+/* HF API */
+int HF_CreateFile(const char *fname);
+int HF_OpenFile(const char *fname);
+int HF_CloseFile(int hffd);
 
-/* ---- Record CRUD ---- */
-int HF_InsertRecord(int fd, const void* rec, int len, HF_RID* outRid);
-int HF_GetRecord(int fd, HF_RID rid, void* outBuf, int* inoutLen);
-/* If newLen > oldLen and no space in-place: relocates record, returns new RID */
-int HF_UpdateRecord(int fd, HF_RID* rid, const void* rec, int newLen);
-int HF_DeleteRecord(int fd, HF_RID rid);
+int HF_InsertRecord(int hffd, const void *record, int len, HF_RID *rid);
 
-/* ---- Scan ---- */
-int HF_ScanOpen(int fd, HF_Scan* scan);
-int HF_ScanNext(HF_Scan* scan, HF_RID* rid, void* outBuf, int* inoutLen);
-int HF_ScanClose(HF_Scan* scan);
+int HF_ScanOpen(int hffd, HF_Scan *scan);
+int HF_ScanNext(HF_Scan *scan, HF_RID *rid, void *recBuf, int *recLen);
+int HF_ScanClose(HF_Scan *scan);
 
-#ifdef __cplusplus
-}
 #endif
-
-#endif /* HF_H */
