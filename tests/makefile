@@ -2,29 +2,38 @@ CC = gcc
 CFLAGS = -Wall -Wextra -O2 -D_POSIX_C_SOURCE=200809L
 INCLUDES = -I../pflayer -I../hfLayer -I../amlayer -Itests
 
-# Common object sets
+# Object files
 PFOBJS = ../pflayer/pf.o ../pflayer/buf.o ../pflayer/hash.o
 HF_OBJS = ../hfLayer/hf.o
 AM_OBJS = ../amlayer/am.o ../amlayer/amfns.o ../amlayer/amsearch.o ../amlayer/aminsert.o \
           ../amlayer/amstack.o ../amlayer/amglobals.o ../amlayer/amscan.o ../amlayer/amprint.o ../amlayer/misc.o
 
 # Default target
-all: test1
+all: test1 test2
 
+########################
+#   TEST EXECUTABLES   #
+########################
 
-# PF-layer buffer + HF dataset test
-test1: test_pf_rw_mix.c $(HF_OBJS) $(PFOBJS)
+# test1 → compiles pf_layer_test.c
+test1: pf_layer_test.c $(HF_OBJS) $(PFOBJS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
 
-test2: test2.c $(HF_OBJS) $(PFOBJS)
+# test2 → compiles hf_layer_test.c
+test2: hf_layer_test.c $(HF_OBJS) $(PFOBJS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
 
-test_pf_rw_mix: test_pf_rw_mix.o $(HF_OBJS) $(PFOBJS) $(AM_OBJS)
+test3: am_layer_test.c $(HF_OBJS) $(PFOBJS) $(AM_OBJS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
 
-# Pattern rules for .o
+
+########################
+#   PATTERN RULES      #
+########################
+
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 clean:
-	rm -f test1 test_pf_rw_mix *.o ../pflayer/*.o ../hfLayer/*.o ../amlayer/*.o courses.hf courses_test.hf 
+	rm -f test1 test2 *.o *.hf *.bin *.tbl *.txt *.db \
+	      ../pflayer/*.o ../hfLayer/*.o ../amlayer/*.o 
