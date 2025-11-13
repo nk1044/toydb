@@ -5,6 +5,7 @@
         "pftypes.h": "c",
         "pf.h": "c",
         "utils.h": "c",
-        "types.h": "c"
+        "types.h": "c",
+        "am.h": "c"
     }
 }

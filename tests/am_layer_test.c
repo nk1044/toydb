@@ -1,14 +1,3 @@
-/* tests/test4_indextest.c
- *
- * Compares three index-construction approaches on an HF file:
- *  A) Build index by scanning existing HF and calling AM_InsertEntry
- *  B) Build index by inserting keys in random order into empty index
- *  C) Bulk-load by sorting keys and writing leaf pages + internal levels
- *
- * Output: build time (ms), index file pages, sample lookup time (ms)
- *
- * Assumption: HF records are text lines and the key (roll no) is the first integer token.
- */
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,10 +8,10 @@
 
 #include "../hfLayer/hf.h"
 #include "../pflayer/pf.h"
-#include "../amLayer/am.h" /* path adjust if needed: your am.h location */
+#include "../amlayer/am.h" 
 
 #define DATA_HF_FILE "courses_var.hf" /* HF file to scan; adjust if needed */
-#define RELNAME "students"            /* base name for index files: students.0, students.1, ... */
+#define RELNAME "courses"            /* base name for index files: courses.0, courses.1, ... */
 #define IDXNO_BASE 100                /* index number base to avoid clobbering others */
 
 /* small helper timing */

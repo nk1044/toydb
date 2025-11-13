@@ -24,8 +24,7 @@ typedef struct {
 
 static HF_File HFtable[HF_MAX_FILE];
 
-/* --------------------------------------------------------- */
-/* Initialize page */
+// Initialize page 
 static void HF_InitPage(char *page)
 {
     HF_PageHdr *h = (HF_PageHdr *)page;
@@ -34,15 +33,13 @@ static void HF_InitPage(char *page)
     h->freeEnd = PF_PAGE_SIZE;
 }
 
-/* --------------------------------------------------------- */
-/* Create file */
+// Create file 
 int HF_CreateFile(const char *fname)
 {
     return PF_CreateFile(fname);
 }
 
-/* --------------------------------------------------------- */
-/* Open file */
+// Open file 
 int HF_OpenFile(const char *fname)
 {
     int pfFd = PF_OpenFile(fname);
@@ -75,8 +72,7 @@ int HF_OpenFile(const char *fname)
     return hffd;
 }
 
-/* --------------------------------------------------------- */
-/* Close file */
+// Close file 
 int HF_CloseFile(int hffd)
 {
     if (hffd < 0 || hffd >= HF_MAX_FILE)
@@ -89,8 +85,7 @@ int HF_CloseFile(int hffd)
     return PF_CloseFile(unixfd);
 }
 
-/* --------------------------------------------------------- */
-/* Insert record */
+// Insert record 
 int HF_InsertRecord(int hffd, const void *record, int len, HF_RID *rid)
 {
     HF_File *hf = &HFtable[hffd];
@@ -155,8 +150,7 @@ try_insert:
     return HF_OK;
 }
 
-/* --------------------------------------------------------- */
-/* Scan open */
+// Scan open 
 int HF_ScanOpen(int hffd, HF_Scan *scan)
 {
     HF_File *hf = &HFtable[hffd];
@@ -168,8 +162,7 @@ int HF_ScanOpen(int hffd, HF_Scan *scan)
     return HF_OK;
 }
 
-/* --------------------------------------------------------- */
-/* Scan next */
+// Scan next 
 int HF_ScanNext(HF_Scan *scan, HF_RID *rid, void *recBuf, int *recLen)
 {
     if (!scan->isOpen)
@@ -211,8 +204,7 @@ int HF_ScanNext(HF_Scan *scan, HF_RID *rid, void *recBuf, int *recLen)
     }
 }
 
-/* --------------------------------------------------------- */
-/* Scan close */
+// Scan close 
 int HF_ScanClose(HF_Scan *scan)
 {
     scan->isOpen = 0;

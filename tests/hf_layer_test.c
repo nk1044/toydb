@@ -5,9 +5,6 @@
 #include "../hfLayer/hf.h"
 #include "../pflayer/pf.h"
 
-/*===============================================================
-   DATASET PARAMETERS
- ===============================================================*/
 #define DATASET "../data/courses.txt"
 #define HF_FILE "courses_var.hf"
 #define STATIC_FILE "courses_static.bin"
@@ -16,17 +13,13 @@
 int STATIC_SIZES[] = {64, 80, 128, 160};
 int NUM_STATIC_SIZES = sizeof(STATIC_SIZES)/sizeof(int);
 
-/*===============================================================
-   UTILITIES
- ===============================================================*/
+//utils
 static void trim(char *s) {
     size_t n = strlen(s);
     if (n && s[n-1] == '\n') s[n-1] = '\0';
 }
 
-/*===============================================================
-   METRICS STRUCT
- ===============================================================*/
+//for statistics
 typedef struct {
     int totalRecords;
     int totalPages;
@@ -41,9 +34,6 @@ void metrics_init(Metrics *m) {
     m->maxRecordLen = 0;
 }
 
-/*===============================================================
-   COUNT PAGES USING PF (open count + get pages)
- ===============================================================*/
 int get_total_pf_pages(const char *fname) {
     int fd = PF_OpenFile(fname);
     if (fd < 0) return 0;
@@ -59,9 +49,7 @@ int get_total_pf_pages(const char *fname) {
     return count;
 }
 
-/*===============================================================
-   LOAD INTO HF (variable-length slotted pages)
- ===============================================================*/
+//  LOAD INTO HF (variable-length slotted pages)
 void build_variable(Metrics *m) {
     printf("\n=== BUILD VARIABLE-LENGTH FILE ===\n");
 
@@ -110,9 +98,7 @@ void build_variable(Metrics *m) {
     printf("Variable-length: %d records, %d pages\n", m->totalRecords, m->totalPages);
 }
 
-/*===============================================================
-   STATIC STORAGE (fixed size)
- ===============================================================*/
+//   STATIC STORAGE (fixed size)
 void build_static(Metrics *m, int recSize) {
     printf("\n=== BUILD STATIC FILE (recSize=%d) ===\n", recSize);
 
@@ -160,9 +146,7 @@ void build_static(Metrics *m, int recSize) {
            recSize, m->totalRecords, m->totalPages);
 }
 
-/*===============================================================
-   PRINT METRICS TABLE
- ===============================================================*/
+//for logging
 void print_metrics(
     Metrics *var,
     Metrics staticList[],
@@ -192,9 +176,7 @@ void print_metrics(
     }
 }
 
-/*===============================================================
-   MAIN
- ===============================================================*/
+//main entry point
 int main() {
     printf("=== VARIABLE vs STATIC STORAGE EXPERIMENT ===\n");
     printf("Dataset: %s\n", DATASET);
