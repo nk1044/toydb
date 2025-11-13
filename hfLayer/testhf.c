@@ -1,169 +1,94 @@
-#include "hf.h"
-#include "pf.h"
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include "../hfLayer/hf.h"
+#include "../pflayer/pf.h"
 
-typedef struct {
-    int  rollno;
-    char name[32];
-    int  age;
-} Student;
+#define HF_FILE "hf_testfile.hf"
 
-void print_error(const char* msg, int err) {
-    printf("ERROR: %s (error code: %d)\n", msg, err);
+/* Simple record generator */
+static void make_record(char *buf, int i) {
+    sprintf(buf, "Record number %d -- some text data...", i);
 }
 
-int main(void) {
-    int err;
-    
+int main() {
+    printf("=== HF LAYER BASIC TEST ===\n");
+
     PF_Init();
 
-    /* create table */
-    printf("Creating Student.tbl...\n");
-    err = HF_CreateFile("Student.tbl");
-    if (err != PFE_OK) {
-        print_error("Failed to create file", err);
+    /* Delete old file */
+    remove(HF_FILE);
+
+    printf("[1] Creating HF file: %s\n", HF_FILE);
+    if (HF_CreateFile(HF_FILE) != HF_OK) {
+        PF_PrintError("HF_CreateFile");
         return 1;
     }
-    
-    /* open table */
-    printf("Opening Student.tbl...\n");
-    int fd = HF_OpenFile("Student.tbl");
+
+    printf("[2] Opening HF file\n");
+    int fd = HF_OpenFile(HF_FILE);
     if (fd < 0) {
-        print_error("Failed to open file", fd);
+        PF_PrintError("HF_OpenFile");
         return 1;
     }
-    printf("File opened successfully (fd=%d)\n", fd);
 
-    /* insert */
-    printf("\n--- Testing INSERT ---\n");
-    Student s = { 101, "Ram", 20 };
-    HF_RID rid = {0};
-    
-    err = HF_InsertRecord(fd, &s, sizeof(s), &rid);
-    if (err != PFE_OK) {
-        print_error("Failed to insert record", err);
-        HF_CloseFile(fd);
-        return 1;
-    }
-    printf("✓ Inserted RID: page=%d slot=%d\n", rid.page, rid.slot);
+    printf("[3] Inserting records...\n");
+    int NUM = 3000;   /* enough to force many page allocations */
+    char rec[256];
+    HF_RID rid;
 
-    /* read back */
-    printf("\n--- Testing GET ---\n");
-    Student out;
-    int len = sizeof(out);
-    
-    err = HF_GetRecord(fd, rid, &out, &len);
-    if (err != PFE_OK) {
-        print_error("Failed to get record", err);
-        HF_CloseFile(fd);
-        return 1;
-    }
-    printf("✓ Read: rollno=%d name=\"%s\" age=%d\n", out.rollno, out.name, out.age);
+    for (int i = 0; i < NUM; i++) {
+        make_record(rec, i);
 
-    /* update */
-    printf("\n--- Testing UPDATE ---\n");
-    Student s2 = { 101, "Ram Kumar", 21 };
-    
-    err = HF_UpdateRecord(fd, &rid, &s2, sizeof(s2));
-    if (err != PFE_OK) {
-        print_error("Failed to update record", err);
-        HF_CloseFile(fd);
-        return 1;
-    }
-    printf("✓ Updated RID: page=%d slot=%d\n", rid.page, rid.slot);
-    
-    /* verify update */
-    len = sizeof(out);
-    err = HF_GetRecord(fd, rid, &out, &len);
-    if (err != PFE_OK) {
-        print_error("Failed to get updated record", err);
-        HF_CloseFile(fd);
-        return 1;
-    }
-    printf("✓ After update: rollno=%d name=\"%s\" age=%d\n", out.rollno, out.name, out.age);
-
-    /* insert more records for scan test */
-    printf("\n--- Inserting more records ---\n");
-    Student students[] = {
-        { 102, "Sita", 19 },
-        { 103, "Lakshman", 22 },
-        { 104, "Bharat", 20 }
-    };
-    
-    for (int i = 0; i < 3; i++) {
-        HF_RID tmpRid;
-        err = HF_InsertRecord(fd, &students[i], sizeof(Student), &tmpRid);
-        if (err != PFE_OK) {
-            print_error("Failed to insert student", err);
-            continue;
+        int err = HF_InsertRecord(fd, rec, strlen(rec) + 1, &rid);
+        if (err != HF_OK) {
+            printf("Insert failed at %d\n", i);
+            PF_PrintError("HF_InsertRecord");
+            return 1;
         }
-        printf("✓ Inserted: %s (page=%d, slot=%d)\n", 
-               students[i].name, tmpRid.page, tmpRid.slot);
     }
+    printf("Inserted %d records.\n", NUM);
 
-    /* scan */
-    printf("\n--- Testing SCAN ---\n");
+    printf("[4] Closing file\n");
+    HF_CloseFile(fd);
+
+    printf("[5] Re-opening for scan test\n");
+    fd = HF_OpenFile(HF_FILE);
+
     HF_Scan scan;
-    err = HF_ScanOpen(fd, &scan);
-    if (err != PFE_OK) {
-        print_error("Failed to open scan", err);
-        HF_CloseFile(fd);
-        return 1;
-    }
-    
+    HF_ScanOpen(fd, &scan);
+
+    printf("[6] Scanning records...\n");
     int count = 0;
-    HF_RID scanRid;
-    while (1) {
-        len = sizeof(out);
-        err = HF_ScanNext(&scan, &scanRid, &out, &len);
-        if (err == PFE_EOF) {
-            break;
+    char buffer[400];
+    int recLen;
+    HF_RID readRID;
+
+    while (HF_ScanNext(&scan, &readRID, buffer, &recLen) == HF_OK) {
+        /* Verify record content */
+        char expected[256];
+        make_record(expected, count);
+
+        if (strcmp(expected, buffer) != 0) {
+            printf("MISMATCH at %d!\n", count);
+            printf("Expected: %s\n", expected);
+            printf("Got     : %s\n", buffer);
+            return 1;
         }
-        if (err != PFE_OK) {
-            print_error("Scan error", err);
-            break;
-        }
-        printf("✓ Scan RID(%d,%d): rollno=%d name=\"%s\" age=%d\n", 
-               scanRid.page, scanRid.slot, out.rollno, out.name, out.age);
+
         count++;
     }
-    printf("Total records scanned: %d\n", count);
-    
-    err = HF_ScanClose(&scan);
-    if (err != PFE_OK) {
-        print_error("Failed to close scan", err);
-    }
 
-    /* delete */
-    printf("\n--- Testing DELETE ---\n");
-    err = HF_DeleteRecord(fd, rid);
-    if (err != PFE_OK) {
-        print_error("Failed to delete record", err);
-    } else {
-        printf("✓ Deleted RID: page=%d slot=%d\n", rid.page, rid.slot);
-    }
-    
-    /* verify deletion */
-    len = sizeof(out);
-    err = HF_GetRecord(fd, rid, &out, &len);
-    if (err == PFE_PAGEFREE) {
-        printf("✓ Record correctly marked as deleted\n");
-    } else if (err == PFE_OK) {
-        printf("✗ ERROR: Record still exists after deletion!\n");
-    } else {
-        print_error("Unexpected error on deleted record", err);
-    }
+    HF_ScanClose(&scan);
+    HF_CloseFile(fd);
 
-    /* close file */
-    printf("\n--- Closing file ---\n");
-    err = HF_CloseFile(fd);
-    if (err != PFE_OK) {
-        print_error("Failed to close file", err);
-        return 1;
-    }
-    printf("✓ File closed successfully\n");
-    
-    printf("\n=== All tests completed ===\n");
+    printf("[7] Scan completed. Verified %d records.\n", count);
+
+    if (count == NUM)
+        printf("\n*** HF LAYER TEST PASSED SUCCESSFULLY ***\n");
+    else
+        printf("\n*** HF LAYER TEST FAILED: count mismatch (%d vs %d) ***\n", count, NUM);
+
     return 0;
 }

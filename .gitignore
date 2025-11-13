@@ -36,6 +36,7 @@ pf_testfile.db
 file1
 file2
 testpf
+hf_test
 
 # Ignore PF layer intermediate archive
 pflayer.o
