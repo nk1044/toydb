@@ -107,6 +107,7 @@ int AM_DestroyIndex(char *fileName, int indexNo);
 int AM_DeleteEntry(int fileDesc, char attrType, int attrLength, char *value, int recId);
 int AM_InsertEntry(int fileDesc, char attrType, int attrLength, char *value, int recId);
 
+
 /* ===== aminsert.c ===== */
 int  AM_InsertintoLeaf(char *pageBuf, int attrLength, char *value, int recId, int index, int status);
 void AM_InsertToLeafFound(char *pageBuf, int recId, int index, AM_LEAFHEADER *header);
@@ -141,5 +142,7 @@ void AM_PushStack(int pageNum, int offset);
 void AM_PopStack(void);
 void AM_topofStack(int *pageNum, int *offset);
 void AM_EmptyStack(void);
+
+void AM_BulkLoad(const char *fileName, int indexNo, const char *dataFile);
 
 #endif /* AM_H */

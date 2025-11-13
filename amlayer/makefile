@@ -1,15 +1,19 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=gnu89
+CFLAGS = -Wall -Wextra -O2 -std=gnu89
 
-# Final executable
-a.out : am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o ../pflayer/pflayer.o main.o amscan.o amprint.o misc.o
-	$(CC) $(CFLAGS) am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o ../pflayer/pflayer.o main.o amscan.o amprint.o misc.o -o a.out
+# Common object files
+AM_OBJS = am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o amscan.o amprint.o ambulkload.o misc.o
+PF_OBJ = ../pflayer/pflayer.o
 
-# Combined object for AM layer
-amlayer.o : am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o amscan.o amprint.o
-	ld -r am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o amscan.o amprint.o -o amlayer.o
+# ===== Final Executable =====
+a.out : $(AM_OBJS) $(PF_OBJ) main.o
+	$(CC) $(CFLAGS) $(AM_OBJS) $(PF_OBJ) main.o -o a.out
 
-# Individual compilation rules
+# ===== Combined Object for AM Layer =====
+amlayer.o : am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o amscan.o amprint.o ambulkload.o
+	ld -r am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o amscan.o amprint.o ambulkload.o -o amlayer.o
+
+# ===== Individual Compilation Rules =====
 am.o : am.c am.h pf.h
 	$(CC) $(CFLAGS) -c am.c
 
@@ -34,33 +38,52 @@ amglobals.o : amglobals.c am.h
 amprint.o : amprint.c am.h pf.h
 	$(CC) $(CFLAGS) -c amprint.c
 
+ambulkload.o : ambulkload.c am.h pf.h
+	$(CC) $(CFLAGS) -c ambulkload.c
+
 misc.o : misc.c am.h pf.h
 	$(CC) $(CFLAGS) -c misc.c
 
 main.o : main.c am.h pf.h
 	$(CC) $(CFLAGS) -c main.c
 
+# ===== TEST TARGETS =====
+# Each test links against full AM + PF layers
 
-test1 : test1.o misc.o am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o amscan.o amprint.o ../pflayer/pflayer.o
-	$(CC) $(CFLAGS) test1.o misc.o am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o amscan.o amprint.o ../pflayer/pflayer.o -o test1
+test1 : test1.o $(AM_OBJS) $(PF_OBJ)
+	$(CC) $(CFLAGS) test1.o $(AM_OBJS) $(PF_OBJ) -o test1
 
 test1.o : test1.c am.h pf.h
 	$(CC) $(CFLAGS) -c test1.c
 
-test2 : test2.o misc.o am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o amscan.o amprint.o ../pflayer/pflayer.o
-	$(CC) $(CFLAGS) test2.o misc.o am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o amscan.o amprint.o ../pflayer/pflayer.o -o test2
+test2 : test2.o $(AM_OBJS) $(PF_OBJ)
+	$(CC) $(CFLAGS) test2.o $(AM_OBJS) $(PF_OBJ) -o test2
 
 test2.o : test2.c am.h pf.h
 	$(CC) $(CFLAGS) -c test2.c
 
-test3 : test3.o misc.o am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o amscan.o amprint.o ../pflayer/pflayer.o
-	$(CC) $(CFLAGS) test3.o misc.o am.o amfns.o amsearch.o aminsert.o amstack.o amglobals.o amscan.o amprint.o ../pflayer/pflayer.o -o test3
+test3 : test3.o $(AM_OBJS) $(PF_OBJ)
+	$(CC) $(CFLAGS) test3.o $(AM_OBJS) $(PF_OBJ) -o test3
 
 test3.o : test3.c am.h pf.h
 	$(CC) $(CFLAGS) -c test3.c
 
+test4 : test4_indextest.o $(AM_OBJS) $(PF_OBJ)
+	$(CC) $(CFLAGS) test4_indextest.o $(AM_OBJS) $(PF_OBJ) -o test4
 
+test4_indextest.o : test4_indextest.c am.h pf.h
+	$(CC) $(CFLAGS) -c test4_indextest.c
 
+# ===== New: index comparison test =====
+# This will be your new index build comparison (existing/incremental/bulkload)
+indextest : indextest.o $(AM_OBJS) $(PF_OBJ)
+	$(CC) $(CFLAGS) indextest.o $(AM_OBJS) $(PF_OBJ) -o indextest
+
+indextest.o : indextest.c am.h pf.h
+	$(CC) $(CFLAGS) -c indextest.c
+
+# ===== Clean =====
 clean:
 	rm -f *.o
 	rm -f *.out
+	rm -f test1 test2 test3 test4 indextest a.out
