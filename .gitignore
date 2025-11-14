@@ -36,6 +36,7 @@ pf_testfile.db
 file1
 file2
 testpf
+testhf
 hf_test
 
 # Ignore PF layer intermediate archive
@@ -47,6 +48,10 @@ pflayer.o
 *.bak
 *.tmp
 *.log
+*.bin
+*.101
+*.102
+*.103
 
 # Ignore build directories
 /build/

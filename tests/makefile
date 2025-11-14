@@ -16,7 +16,7 @@ test1: pf_layer_test.c $(HF_OBJS) $(PFOBJS)
 test2: hf_layer_test.c $(HF_OBJS) $(PFOBJS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
 
-test3: test2 am_layer_test.c $(HF_OBJS) $(PFOBJS) $(AM_OBJS)
+test3: am_layer_test.c $(HF_OBJS) $(PFOBJS) $(AM_OBJS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
 
 %.o: %.c
