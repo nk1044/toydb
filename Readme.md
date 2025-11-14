@@ -119,13 +119,13 @@ Replace `figures/...` with actual paths in your repo.
 
 ## Slotted Page Diagram
 
-![Slotted Page Layout](figures/slotted_page_diagram.png)
+![WhatsApp Image 2025-11-14 at 10 20 02](https://github.com/user-attachments/assets/eafac76f-40d8-4773-8314-84c40bde3de2)
 
 ---
 
 ## PF Layer: LRU vs MRU Performance
 
-![LRU vs MRU Graph](figures/lru_mru_comparison.png)
+![WhatsApp Image 2025-11-14 at 10 17 06](https://github.com/user-attachments/assets/a6f88c71-a1fd-4ed2-8b2b-1d7221f9aa3a)
 
 ---
 
@@ -133,27 +133,27 @@ Replace `figures/...` with actual paths in your repo.
 
 ### Pages Required vs Record Size
 
-![Static Record Pages](figures/static_pages_graph.png)
+![WhatsApp Image 2025-11-14 at 10 16 59](https://github.com/user-attachments/assets/99c0c86e-c91a-47e8-9412-6dfae94dddb2)
 
 ### Utilization vs Record Size
 
-![Static Utilization Graph](figures/static_utilization_graph.png)
+![WhatsApp Image 2025-11-14 at 10 16 52](https://github.com/user-attachments/assets/dd5910d5-0397-4fcb-aee0-9ad465a850bf)
 
 ---
 
-## Index Construction (All Three Histograms)
+## Index Construction
 
 ### Build Time
 
-![Index Build Time](figures/index_build_time.png)
+![WhatsApp Image 2025-11-14 at 10 25 36 (1)](https://github.com/user-attachments/assets/1eda78c3-3a97-4bbd-b997-12f85d49546b)
 
 ### Pages Used
 
-![Index Pages Used](figures/index_pages_used.png)
+![WhatsApp Image 2025-11-14 at 10 25 36](https://github.com/user-attachments/assets/034727c6-189c-4f82-bde4-ca323d08c442)
 
 ### Lookup Time
 
-![Index Lookup Time](figures/index_lookup.png)
+![WhatsApp Image 2025-11-14 at 10 25 37](https://github.com/user-attachments/assets/4f8199df-da30-4761-b826-81f20812e63b)
 
 ---
 
